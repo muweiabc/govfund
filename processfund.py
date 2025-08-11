@@ -1,36 +1,5 @@
 import pandas as pd
 
-def read_govfund_data():
-    """
-    读取govfund1.xls文件的数据并存入DataFrame
-    以第4行作为列名，出资人名称列类型为list
-    """
-    try:
-        # 读取Excel文件，以第4行（索引为3）作为列名
-        df = pd.read_excel('govfund1.xlsx', header=3)
-        
-        print("数据读取成功！")
-        print(f"数据形状: {df.shape}")
-        print(f"列名: {list(df.columns)}")
-        print("\n前5行数据:")
-        print(df.head(10))
-        
-        # 处理出资人名称列，将其转换为list类型
-        if '出资人名称' in df.columns:
-            # 将出资人名称列转换为字符串，然后按分隔符分割成list
-            df['出资人名称'] = df['出资人名称'].astype(str).apply(
-                lambda x: x.split(',') if ',' in x else [x] if x != 'nan' else []
-            )
-            print("\n出资人名称列已转换为list类型")
-        
-        return df
-    
-    except FileNotFoundError:
-        print("错误: 找不到govfund1.xls文件")
-        return None
-    except Exception as e:
-        print(f"读取文件时发生错误: {e}")
-        return None
 
 def analyze_data(df):
     """
