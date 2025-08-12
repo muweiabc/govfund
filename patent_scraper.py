@@ -11,7 +11,7 @@ import pandas as pd
 
 class PatentScraper:
     def __init__(self):
-        self.base_url = "https://pss-system.cponline.cnipa.gov.cn"
+        self.base_url = "https://pss-system.cponline.cnipa.gov.cn/retrieveList?prevPageTit=changgui"
         self.driver = None
         
     def setup_driver(self):
@@ -23,6 +23,16 @@ class PatentScraper:
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
+
+        # 忽略JavaScript debugger，避免渲染被暂停
+        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # 禁用JavaScript调试功能
+        chrome_options.add_argument("--disable-javascript-debugger")
+        chrome_options.add_argument("--disable-breakpad")
+        chrome_options.add_argument("--disable-crash-reporter")
         
         # 设置用户代理
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -40,16 +50,29 @@ class PatentScraper:
         try:
             print(f"正在访问专利搜索系统...")
             self.driver.get(self.base_url)
-            # try:
-            #     element = WebDriverWait(driver, 10).until(
-            #         EC.presence_of_element_located((By.ID, "my_element_id"))
-            #     )
-            #     # 此时，页面已加载，你可以开始获取内容
-            #     print(element.text)
-            # except:
-            #     print("指定元素未在10秒内出现")
+# 添加单个 cookie
+            self.driver.add_cookie({
+                "name": "dX1xbeyMT58WO",
+                "value": "5COCx5QjXrwkh1lRa6J07uisEFIU5grTVbQui59tU0G0seTFd6Bgq4Zea99uJI_UpI3yQZ2NtJiXZHwpZwnM71q"
+            })
+            self.driver.add_cookie({
+                "name": "dX1xbeyMT58WP",
+                "value": "R279ZIQJVo.MPtjVtnZEkgKW9MLo.g9umJTe2kjvuGPgEEAQqvYW4qfgMfrBLgeovZ9ZwzAC37pH5EMb1vVFygT_NX3BLIyp0mEPnpeJtvzxFWzU8KejsgdMR38gqzMiHcHd32ck0i3MkemvGHrf78MSi5u8ZI2SV8iiRHvpXLWU2_Nq.ElVs3D7NW7AzSrANPtkr6ghWCjxmHd50uf6oIt3gNThnZGbVZrhn9Q9hIuJQj.vUbAHIKeSN9EJGnN1EOpLLIBN9bvlpcovv40EDfQB32RDo.yMESpDA6DK_hFXvZ2yJlgzZ4Q1WJrMo8QVfx3ek8NuTdI6G8KVb_kN4M_IR711w.YOXt05qSm0KEWIQdyxFrFPl8ztLk2y.M96BVcJ.fEeTxGD3d7ML5A_WtqI8LYiuDcpJYnGY762.77"
+            })
+            
+            self.driver.execute_cdp_cmd("Network.enable", {})
+            self.driver.execute_cdp_cmd("Network.setExtraHTTPHeaders", {
+                "headers": {
+                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+                    "Referer": "https://pss-system.cponline.cnipa.gov.cn/retrieveList?prevPageTit=changgui",
+                    "origin": "https://pss-system.cponline.cnipa.gov.cn",
+                    "Authorization": "Bearer eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJuZXVzb2Z0IiwiaWF0IjoxNzU0ODA5MDY3LCJleHAiOjE3NTQ4MTYyNjcsInVzZXJJZCI6IjE1NjA0NjIzNTkzIn0.QAYXzPsNMXpLttvVPlkmvAsBn-r53SN-7_SqWaamtiuDIiY5vrMjMELiLDwzOOO2K5zU39at7KwpryKh-V6_RYipUHsGEVUn-OCXCkAFF-Y4jXzr3TFhE98LI8C0NTT0wyp_Q9N_bmyrjaim3Eiosy77j8Z7L0EFdRChb9bJvD0",
+                    "encryptaeskey": "jvSDYKzWS2LAanx6E3teusi7utCvG6L+GnhvfJ5osH7WzQgudkpbRhfGyjyiBn7kli5Vtr/viPgP1EpygI80Eg=="
+                }
+            })
+            self.driver.refresh()
             # 等待页面加载
-            time.sleep(5)
+            # time.sleep(5)
             
             # 查找搜索输入框
             print("正在查找搜索输入框...")
