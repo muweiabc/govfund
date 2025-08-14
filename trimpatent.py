@@ -1,8 +1,10 @@
 import pandas as pd
 import os
+import numpy as np
 
 # 按年份顺序定义文件列表
-years = [2020, 2021, 2022, 2023, 2024, 2025]
+# years = [2020, 2021, 2022, 2023, 2024, 2025]
+years = np.arange(2005, 2011)
 data_dir = 'data'
 
 # 存储所有数据框的列表
@@ -32,7 +34,7 @@ if all_dfs:
     print(f'数据拼接完成，总共 {len(combined_df)} 条记录')
     
     # 保存到trimpatent.csv
-    output_file = 'trimpatent.csv'
+    output_file = 'trimpatent3.csv'
     print(f'正在保存到 {output_file}...')
     combined_df.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f'数据已保存到 {output_file}')

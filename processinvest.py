@@ -87,6 +87,11 @@ def read_and_merge_investment_data():
         print("没有成功读取任何文件")
         return None
 
+def filter_company(df):
+    companies = pd.read_excel('invest.xlsx')
+    filtered_companies = companies['融资主体'].value_counts()   
+    filtered_companies[1:].to_csv('filtered_companies.csv')
+
 if __name__ == "__main__":
     # 读取并合并投资事件数据
-    merged_data = read_and_merge_investment_data()
+    # merged_data = filter_company()
