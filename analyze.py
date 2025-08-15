@@ -83,6 +83,12 @@ def analyze_fund_overlap():
         print(f"分析过程中发生错误: {e}")
         return None, None
 
+def get_gdp(province, year, gdplist):
+    row = gdplist[(gdplist['省级'] == province) & (gdplist['年份'] == year)]
+    return row.iloc[:,2]
+
 if __name__ == "__main__":
     # 分析基金名称匹配情况
-    matched_data, unmatched_data = analyze_fund_overlap()
+    # matched_data, unmatched_data = analyze_fund_overlap()
+    gdplist = pd.read_excel("gdp.xlsx")
+    print(get_gdp('北京市',2021,gdplist))
