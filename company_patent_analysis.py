@@ -14,7 +14,7 @@ def analyze_company_patents():
     
     # 1. 读取filtered_companies数据
     print("正在读取filtered_companies.csv...")
-    companies_df = pd.read_csv('filtered_companies.csv')
+    companies_df = pd.read_excel('invest.xlsx', sheet_name='所有公司')
     company_names = companies_df['融资主体'].tolist()
     print(f"共读取到 {len(company_names)} 家公司")
     
@@ -86,19 +86,6 @@ def analyze_company_patents():
     sparse_matrix = csr_matrix((data, (rows, cols)), 
                               shape=(len(company_names), len(years)))
     
-    # 8. 保存结果
-    print("正在保存结果...")
-    
-    # 保存稀疏矩阵
-    with open('company_patent_matrix.pkl', 'wb') as f:
-        pickle.dump({
-            'sparse_matrix': sparse_matrix,
-            'company_names': company_names,
-            'years': years,
-            'company_to_idx': company_to_idx,
-            'year_to_idx': year_to_idx
-        }, f)
-    
     # 保存为CSV格式（便于查看）
     print("正在保存CSV格式...")
     result_df = pd.DataFrame(
@@ -106,7 +93,7 @@ def analyze_company_patents():
         index=company_names,
         columns=years
     )
-    result_df.to_csv('company_patent_yearly.csv')
+    result_df.to_excel('company_patent_yearly.csv', sheet_name='原始数据')
     
     # 9. 输出统计信息
     print("\n=== 分析结果 ===")
