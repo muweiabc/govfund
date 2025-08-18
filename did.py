@@ -11,7 +11,6 @@ def filter_data():
     with pd.ExcelWriter('regress_data_with_gdp.xlsx', engine='openpyxl') as writer:
         df.to_excel(writer, sheet_name='回归数据')
 
-filter_data() 
 
 def perform_did_regression_with_year_dummies(enable_province_dummies=True, use_time_effects=True):
     """
