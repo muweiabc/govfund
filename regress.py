@@ -1,5 +1,7 @@
 import pandas as pd
-import linearmodels as lm
+import numpy as np
+import statsmodels.api as sm
+from statsmodels.regression.linear_model import OLS
 import os
 import traceback
 import warnings
@@ -188,7 +190,7 @@ def regress():
                     
                     fund = get_fund(province, year, funds_df)
                     pos = convert_province(province)
-                    urban_rate = urban_df.loc[pos, year]
+                    urban_rate = urban_df.loc[pos, str(year)]
                     if fund > 0:  # 只添加有基金数据的记录
                         matched_count += 1
 
@@ -234,13 +236,63 @@ def regress():
         # 执行回归
         try:
             print("\n正在执行OLS回归...")
-            model = lm.OLS(y_df, x_df)
-            # model = lm.PanelOLS(y_df, x_df, entity_effects=False, time_effects=False)
+            
+            # 确保数据类型正确
+            print("   - 检查数据类型...")
+            for col in x_df.columns:
+                print(f"     {col}: {x_df[col].dtype}")
+                if x_df[col].dtype == 'object':
+                    x_df[col] = pd.to_numeric(x_df[col], errors='coerce')
+                elif x_df[col].dtype == 'bool':
+                    x_df[col] = x_df[col].astype(int)
+            
+            print(f"     y_df: {y_df.dtypes}")
+            if y_df['人均GDP'].dtype == 'object':
+                y_df['人均GDP'] = pd.to_numeric(y_df['人均GDP'], errors='coerce')
+            
+            # 移除包含NaN的行
+            print("   - 移除包含NaN的行...")
+            initial_rows = len(x_df)
+            valid_mask = ~(x_df.isna().any(axis=1) | y_df.isna().any(axis=1))
+            x_df_clean = x_df[valid_mask]
+            y_df_clean = y_df[valid_mask]
+            final_rows = len(x_df_clean)
+            print(f"     - 初始行数: {initial_rows}")
+            print(f"     - 最终行数: {final_rows}")
+            print(f"     - 移除行数: {initial_rows - final_rows}")
+            
+            if final_rows == 0:
+                print("   ❌ 错误: 处理后没有有效数据")
+                return
+            
+            if final_rows < len(x_df.columns) + 1:
+                print(f"   ❌ 错误: 观测值数量({final_rows})少于变量数量({len(x_df.columns) + 1})")
+                return
+            
+            # 使用statsmodels.OLS进行回归
+            # 添加常数项
+            x_df_with_constant = sm.add_constant(x_df_clean)
+            
+            model = OLS(y_df_clean, x_df_with_constant)
             results = model.fit()
             
             print("\n=== 回归分析结果 ===")
-          
-            print(results.summary)
+            print(results.summary())
+            
+            # 显示关键统计信息
+            print(f"\n关键统计信息:")
+            print(f"  R²: {results.rsquared:.4f}")
+            print(f"  调整R²: {results.rsquared_adj:.4f}")
+            print(f"  F统计量: {results.fvalue:.4f}")
+            print(f"  F统计量p值: {results.f_pvalue:.4f}")
+            
+            # 显示系数
+            print(f"\n回归系数:")
+            for param, value in results.params.items():
+                if param in results.pvalues.index:
+                    p_value = results.pvalues[param]
+                    t_value = results.tvalues[param]
+                    print(f"  {param}: {value:.4f} (t={t_value:.4f}, p={p_value:.4f})")
             
         except Exception as e:
             print(f"✗ 错误: 执行回归分析时发生异常: {e}")
