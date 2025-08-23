@@ -9,7 +9,7 @@ warnings.filterwarnings('ignore')
 
 def check_required_files():
     """检查必要的文件是否存在"""
-    required_files = ['gdp.xlsx', 'govfund_analysis_results.xlsx']
+    required_files = ['gdp.xlsx', 'govfund_analysis_results.xlsx', '2003-2023各省分行业全社会固定资产投资额.xlsx']
     missing_files = []
     
     print("检查必要文件...")
@@ -31,8 +31,55 @@ def check_required_files():
     return True
 
 def read_urban():
-    df = pd.read_excel('2000-2023年各省份城镇化水平.xlsx',sheet_name='原始版本',index_col=0)
-    return df
+    """读取城镇化率数据"""
+    try:
+        df = pd.read_excel('2000-2023年各省份城镇化水平.xlsx',sheet_name='原始版本',index_col=0)
+        print(f"✓ 成功读取城镇化率数据")
+        print(f"  数据形状: {df.shape}")
+        print(f"  列名: {list(df.columns)}")
+        return df
+    except Exception as e:
+        print(f"✗ 读取城镇化率数据失败: {e}")
+        return None
+
+def read_investment_data():
+    """读取固定资产投资数据"""
+    try:
+        print("正在读取固定资产投资数据...")
+        file_path = '2003-2023各省分行业全社会固定资产投资额.xlsx'
+        
+        if not os.path.exists(file_path):
+            print(f"✗ 错误: 固定资产投资文件不存在 - {file_path}")
+            return None
+        
+        # 尝试读取Excel文件
+        xl_file = pd.ExcelFile(file_path)
+        print(f"✓ 成功读取固定资产投资文件")
+        print(f"  Sheet数量: {len(xl_file.sheet_names)}")
+        print(f"  Sheet名称: {xl_file.sheet_names}")
+        
+        # 选择第一个sheet（假设包含主要数据）
+        sheet_name = xl_file.sheet_names[0]
+        print(f"  使用Sheet: {sheet_name}")
+        
+        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        print(f"  数据形状: {df.shape}")
+        print(f"  列名: {list(df.columns)}")
+    
+        investment_col = '合计/亿元'
+        # 检查数据结构
+        print(f"  投资列: {investment_col}")
+        print(f"  前5行数据:")
+        print(df.head())
+        
+        return df, investment_col
+        
+    except Exception as e:
+        print(f"✗ 读取固定资产投资数据时发生错误: {e}")
+        print(f"  错误类型: {type(e).__name__}")
+        print("  详细错误信息:")
+        traceback.print_exc()
+        return None, None
 
 def read_gdp_data():
     """读取GDP数据文件"""
@@ -166,6 +213,17 @@ def regress():
             print("\n无法读取城镇化率数据，程序终止")
             return
         
+        # 读取固定资产投资数据
+        investment_result = read_investment_data()
+        if investment_result is None:
+            print("\n无法读取固定资产投资数据，程序终止")
+            return
+        
+        investment_df, investment_col = investment_result
+        if investment_df is None:
+            print("\n固定资产投资数据为空，程序终止")
+            return
+        
         # urban_df = urban_df.rename(columns={'年份': 'year', '省份': 'province', '城镇化率': 'urban_rate'})
         
         # 执行回归分析
@@ -191,12 +249,16 @@ def regress():
                     fund = get_fund(province, year, funds_df)
                     pos = convert_province(province)
                     urban_rate = urban_df.loc[pos, str(year)]
+                    
+                    # 获取固定资产投资数据
+                    investment_value = get_investment(province, year, investment_df, investment_col)
+                    
                     if fund > 0:  # 只添加有基金数据的记录
                         matched_count += 1
 
                         y.append(pgdp)
                         # x.append(fund)
-                        x.append([fund,urban_rate])
+                        x.append([fund, urban_rate, investment_value])
                         
             except Exception as e:
                 print(f"  错误: 处理第{idx+1}行数据时发生异常: {e}")
@@ -220,13 +282,15 @@ def regress():
         
         # 创建数据框
         try:
-            x_df = pd.DataFrame(x, columns=['基金数量','城镇化率'])
+            x_df = pd.DataFrame(x, columns=['基金数量','城镇化率','固定资产投资'])
             y_df = pd.DataFrame(y, columns=['人均GDP'])
             
             print(f"\n回归数据准备完成:")
             print(f"  自变量X形状: {x_df.shape}")
             print(f"  因变量y形状: {y_df.shape}")
             print(f"  基金数量范围: {x_df['基金数量'].min()} - {x_df['基金数量'].max()}")
+            print(f"  城镇化率范围: {x_df['城镇化率'].min():.4f} - {x_df['城镇化率'].max():.4f}")
+            print(f"  固定资产投资范围: {x_df['固定资产投资'].min():.2f} - {x_df['固定资产投资'].max():.2f}")
             print(f"  人均GDP范围: {y_df['人均GDP'].min():.2f} - {y_df['人均GDP'].max():.2f}")
             
         except Exception as e:
@@ -310,10 +374,44 @@ def regress():
         traceback.print_exc()
 
 def convert_province(province):
+    """转换省份名称格式"""
     if province.endswith('市') or province.endswith('省'):
         return province[:-1]
     else:
         return province
+
+def get_investment(province, year, investment_df, investment_col):
+    """根据省份和年份获取固定资产投资数据"""
+    try:
+        # 转换省份名称格式
+        province_clean = convert_province(province)
+        
+        # 在投资数据中查找匹配
+        for idx, row in investment_df.iterrows():
+            # 检查省份名称是否匹配（支持多种格式）
+            row_province = str(row.iloc[0]) if len(row) > 0 else ""
+            if (province_clean in row_province or 
+                province in row_province or 
+                row_province in province or 
+                row_province in province_clean):
+                
+                # 查找年份列
+                for col in investment_df.columns:
+                    if str(col) == str(year):
+                        try:
+                            investment_value = pd.to_numeric(row[col], errors='coerce')
+                            if not pd.isna(investment_value):
+                                return investment_value
+                        except:
+                            continue
+        
+        # 如果没有找到匹配的数据
+        print(f"  警告: 未找到 {province} 在 {year} 年的投资数据")
+        return 0  # 返回0而不是None，避免后续错误
+        
+    except Exception as e:
+        print(f"  错误: 在查找投资数据时发生异常: {e}")
+        return 0
 
 if __name__ == "__main__":
     try:
