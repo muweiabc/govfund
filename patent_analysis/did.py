@@ -29,7 +29,7 @@ def perform_did_regression_with_year_dummies(enable_province_dummies=True, use_t
         
         # 1. 读取带GDP数据的timeline数据
         print("1. 读取带GDP数据的timeline数据...")
-        df = pd.read_excel('regress_data_with_gdp.xlsx', sheet_name='回归数据')
+        df = pd.read_excel('./regress_data_with_gdp.xlsx', sheet_name='回归数据')
         print(f"   - 数据行数: {len(df):,}")
         
         # 2. 创建面板数据结构
@@ -164,6 +164,7 @@ def perform_did_regression_with_year_dummies(enable_province_dummies=True, use_t
                 control_vars += province_dummy_cols 
             X = panel_df[control_vars]
             y = panel_df['ln_patent_plus_1']
+            # y= panel_df['patent_count']
             
             print(f"   - 回归变量数量: {len(control_vars)}")
             control_desc = "GDP"
