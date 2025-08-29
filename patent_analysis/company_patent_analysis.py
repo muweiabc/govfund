@@ -7,14 +7,14 @@ from tqdm import tqdm
 
 def analyze_company_patents():
     """
-    读取filtered_companies中的公司名，在t'ri'm'pa't'e'n't中查找该公司在各年份获得的专利数量
+    读取invest中的公司名，在t'ri'm'pa't'e'n't中查找该公司在各年份获得的专利数量
     使用稀疏矩阵存储结果，避免内存浪费
     """
     print("开始分析公司专利数据...")
     
     # 1. 读取filtered_companies数据
-    print("正在读取filtered_companies.csv...")
-    companies_df = pd.read_excel('invest.xlsx', sheet_name='所有公司')
+    print("invest.csv...")
+    companies_df = pd.read_excel('invest.xlsx', sheet_name='有专利公司首次投资')
     company_names = companies_df['融资主体'].tolist()
     print(f"共读取到 {len(company_names)} 家公司")
     
@@ -23,14 +23,15 @@ def analyze_company_patents():
     
     # 获取文件大小以估算行数
     import os
-    file_size = os.path.getsize('trimpatent_all.csv')
+    file = 'data/trimpatent_sample.csv'
+    file_size = os.path.getsize(file)
     print(f"文件大小: {file_size / (1024**3):.2f} GB")
     
     # 分块读取专利数据
     chunk_size = 100000  # 每次读取10万行
     patents_chunks = []
     
-    for chunk in tqdm(pd.read_csv('trimpatent_all.csv', chunksize=chunk_size), 
+    for chunk in tqdm(pd.read_csv(file, chunksize=chunk_size), 
                       desc="读取专利数据"):
         # 只保留需要的列
         chunk = chunk[['申请人', '申请年份']].copy()
@@ -93,7 +94,7 @@ def analyze_company_patents():
         index=company_names,
         columns=years
     )
-    result_df.to_excel('company_patent_yearly.csv', sheet_name='原始数据')
+    result_df.to_excel('company_patent_yearly.xlsx', sheet_name='原始数据')
     
     # 9. 输出统计信息
     print("\n=== 分析结果 ===")

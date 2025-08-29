@@ -2,16 +2,20 @@ import pandas as pd
 import re
 import numpy as np
 
-def extract_province_from_region():
+def extract_province_from_region(input_file='regress_data.xlsx', output_file=None):
     """
-    读取regress_data，找到每个公司在invest的地区列里的省份名，加到该行里
+    读取指定的regress_data文件，找到每个公司在invest的地区列里的省份名，加到该行里
+    
+    参数:
+    input_file: 输入的regress_data文件路径
+    output_file: 输出文件路径，如果为None则自动生成
     """
     try:
         print("=== 提取公司所在省份信息 ===")
         
         # 1. 读取patent_investment_timeline数据
-        print("1. 读取regress_data数据...")
-        timeline_df = pd.read_excel('regress_data.xlsx', sheet_name='回归数据')
+        print(f"1. 读取{input_file}数据...")
+        timeline_df = pd.read_excel(input_file, sheet_name='回归数据')
         print(f"   - 数据行数: {len(timeline_df):,}")
         
         # 2. 读取invest_with_treatment数据
@@ -58,7 +62,16 @@ def extract_province_from_region():
         
         # 6. 保存更新后的数据
         print("\n6. 保存更新后的数据...")
-        output_filename = 'regress_data_with_province.xlsx'
+        if output_file is None:
+            # 根据输入文件名自动生成输出文件名
+            if 'patent' in input_file.lower():
+                output_filename = 'regress_data_patents_with_province.xlsx'
+            elif 'citation' in input_file.lower():
+                output_filename = 'regress_data_citations_with_province.xlsx'
+            else:
+                output_filename = 'regress_data_with_province.xlsx'
+        else:
+            output_filename = output_file
         
         with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
             timeline_df.to_excel(writer, sheet_name='投资前后专利数据', index=False)
@@ -130,16 +143,20 @@ def extract_province(region):
     
     return None
 
-def add_province_gdp_data():
+def add_province_gdp_data(input_file='regress_data_with_province.xlsx', output_file=None):
     """
     添加投资前三年，后三年所在省份的gdp数据
+    
+    参数:
+    input_file: 输入的带省份信息的数据文件路径
+    output_file: 输出文件路径，如果为None则自动生成
     """
     try:
         print("=== 添加省份GDP数据 ===")
         
         # 1. 读取带省份信息的timeline数据
-        print("1. 读取带省份信息的数据...")
-        timeline_df = pd.read_excel('regress_data_with_province.xlsx', sheet_name='投资前后专利数据')
+        print(f"1. 读取{input_file}数据...")
+        timeline_df = pd.read_excel(input_file, sheet_name='投资前后专利数据')
         print(f"   - 数据行数: {len(timeline_df):,}")
         
         # 2. 读取GDP数据
@@ -249,7 +266,16 @@ def add_province_gdp_data():
         
         # 7. 保存更新后的数据
         print("\n7. 保存更新后的数据...")
-        output_filename = 'regress_data_with_gdp.xlsx'
+        if output_file is None:
+            # 根据输入文件名自动生成输出文件名
+            if 'patent' in input_file.lower():
+                output_filename = 'regress_data_patents_with_gdp.xlsx'
+            elif 'citation' in input_file.lower():
+                output_filename = 'regress_data_citations_with_gdp.xlsx'
+            else:
+                output_filename = 'regress_data_with_gdp.xlsx'
+        else:
+            output_filename = output_file
         
         with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
             timeline_df.to_excel(writer, sheet_name='回归数据', index=False)
@@ -258,22 +284,28 @@ def add_province_gdp_data():
             summary_stats = timeline_df.describe()
             summary_stats.to_excel(writer, sheet_name='数据统计')
             
+            # 动态识别列名
+            total_columns = [col for col in timeline_df.columns if '前3年' in col and '总数' in col]
+            growth_columns = [col for col in timeline_df.columns if '增长率' in col]
+            
             # 按年份统计
-            yearly_stats = timeline_df.groupby('投资年份').agg({
-                '前3年专利总数': 'mean',
-                '后3年专利总数': 'mean',
-                '专利增长率': 'mean',
-                'treatment': 'count'
-            }).round(2)
+            agg_dict = {'treatment': 'count'}
+            for col in total_columns:
+                agg_dict[col] = 'mean'
+            for col in growth_columns:
+                agg_dict[col] = 'mean'
+            
+            yearly_stats = timeline_df.groupby('投资年份').agg(agg_dict).round(2)
             yearly_stats.to_excel(writer, sheet_name='按年份统计')
             
             # 按省份统计
-            province_stats = timeline_df.groupby('省份').agg({
-                '前3年专利总数': ['mean', 'count'],
-                '后3年专利总数': ['mean', 'count'],
-                '专利增长率': 'mean',
-                'treatment': 'count'
-            }).round(2)
+            agg_dict_province = {'treatment': 'count'}
+            for col in total_columns:
+                agg_dict_province[col] = ['mean', 'count']
+            for col in growth_columns:
+                agg_dict_province[col] = 'mean'
+            
+            province_stats = timeline_df.groupby('省份').agg(agg_dict_province).round(2)
             province_stats.to_excel(writer, sheet_name='按省份统计')
             
             # GDP统计

@@ -2,14 +2,19 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-def extract_regress_data():
+def extract_regress_data(patent_data_file=None, data_type='patent_count'):
     """
     从invest读取公司首次获投资的时间，
-    从company_patent_yearly中的"有专利公司"sheet中获取该公司在获得投资前3年和后3年的专利数，
+    从专利数据中获取该公司在获得投资前3年和后3年的专利数或被引证次数，
     保存为合适的数据结构
+    
+    参数:
+    patent_data_file: 专利数据文件路径，如果为None则使用默认文件
+    data_type: 数据类型，'patent_count'表示专利数量，'citation_count'表示被引证次数
     """
     try:
         print("=== 提取投资前后专利时间序列数据 ===")
+        print(f"数据类型: {data_type}")
         
         # 1. 读取首次投资数据
         print("1. 读取首次投资数据...")
@@ -18,7 +23,35 @@ def extract_regress_data():
         
         # 2. 读取专利年度数据
         print("2. 读取专利年度数据...")
-        patent_df = pd.read_excel('company_patent_yearly.xlsx', sheet_name='有专利公司')
+        
+        # 根据数据类型选择默认文件
+        if patent_data_file is None:
+            if data_type == 'patent_count':
+                patent_data_file = 'patent_analysis/company_patent_yearly.xlsx'
+                sheet_name = '有专利公司'
+            elif data_type == 'citation_count':
+                patent_data_file = 'patent_analysis/company_patent_citations_yearly.xlsx'
+                sheet_name = '被引证次数'
+            else:
+                raise ValueError("data_type必须是'patent_count'或'citation_count'")
+        else:
+            # 如果指定了文件，尝试自动检测sheet名称
+            if data_type == 'patent_count':
+                sheet_name = '有专利公司'
+            elif data_type == 'citation_count':
+                sheet_name = '被引证次数'
+            else:
+                sheet_name = None
+        
+
+        try:
+            patent_df = pd.read_excel('patent_analysis/' + patent_data_file, sheet_name=sheet_name)
+        except:
+            # 如果指定的sheet不存在，尝试第一个sheet
+            patent_df = pd.read_excel(patent_data_file, sheet_name=0)
+            print(f"   - 使用默认sheet: {patent_df.columns[0]}")
+        
+        print(f"   - 专利数据文件: {patent_data_file}")
         print(f"   - 有专利公司数: {len(patent_df):,}")
         
         # 3. 处理投资时间，转换为年份
@@ -46,7 +79,23 @@ def extract_regress_data():
             treatment = row['treatment']
             
             # 在专利数据中查找该公司
-            company_patent_data = patent_df[patent_df['Unnamed: 0'] == company_name]
+            # 尝试不同的列名来匹配公司名称
+            company_patent_data = None
+            company_name_col = None
+            
+            # 查找公司名称列
+            for col in patent_df.columns:
+                if '公司' in col or '名称' in col or '申请人' in col or col == 'Unnamed: 0':
+                    if company_name in patent_df[col].values:
+                        company_name_col = col
+                        company_patent_data = patent_df[patent_df[col] == company_name]
+                        break
+            
+            if company_patent_data is None:
+                # 如果没找到，尝试直接匹配索引
+                if company_name in patent_df.index:
+                    company_patent_data = patent_df.loc[[company_name]]
+                    company_name_col = 'index'
             
             if len(company_patent_data) > 0:
                 # 计算前3年和后3年的年份范围
@@ -59,9 +108,11 @@ def extract_regress_data():
                 # 前3年专利数
                 for year in pre_years:
                     if year in year_columns:
-                        year_str = str(year)
-                        if year_str in patent_df.columns:
-                            patent_count = company_patent_data[year_str].iloc[0]
+                        
+                        if year in patent_df.columns:
+                        
+                            patent_count = company_patent_data[year].iloc[0]
+                          
                             patent_counts[f'前{investment_year - year}年'] = int(patent_count) if pd.notna(patent_count) else 0
                         else:
                             patent_counts[f'前{investment_year - year}年'] = 0
@@ -72,7 +123,10 @@ def extract_regress_data():
                 if investment_year in year_columns:
                     year_str = str(investment_year)
                     if year_str in patent_df.columns:
-                        patent_count = company_patent_data[year_str].iloc[0]
+                        if company_name_col == 'index':
+                            patent_count = company_patent_data[year_str].iloc[0]
+                        else:
+                            patent_count = company_patent_data[year_str].iloc[0]
                         patent_counts['投资当年'] = int(patent_count) if pd.notna(patent_count) else 0
                     else:
                         patent_counts['投资当年'] = 0
@@ -84,7 +138,10 @@ def extract_regress_data():
                     if year in year_columns:
                         year_str = str(year)
                         if year_str in patent_df.columns:
-                            patent_count = company_patent_data[year_str].iloc[0]
+                            if company_name_col == 'index':
+                                patent_count = company_patent_data[year_str].iloc[0]
+                            else:
+                                patent_count = company_patent_data[year_str].iloc[0]
                             patent_counts[f'后{year - investment_year}年'] = int(patent_count) if pd.notna(patent_count) else 0
                         else:
                             patent_counts[f'后{year - investment_year}年'] = 0
@@ -95,24 +152,43 @@ def extract_regress_data():
                 pre_total = sum([patent_counts[f'前{i}年'] for i in range(1, 4)])
                 post_total = sum([patent_counts[f'后{i}年'] for i in range(1, 4)])
                 
-                
-                # 创建记录
-                record = {
-                    '公司名称': company_name,
-                    '投资年份': investment_year,
-                    '投资时间': row['投资时间'],
-                    'treatment': treatment,
-                    '前3年专利总数': pre_total,
-                    '投资当年专利数': patent_counts['投资当年'],
-                    '后3年专利总数': post_total,
-                    '前3年专利数_前1年': patent_counts['前1年'],
-                    '前3年专利数_前2年': patent_counts['前2年'],
-                    '前3年专利数_前3年': patent_counts['前3年'],
-                    '后3年专利数_后1年': patent_counts['后1年'],
-                    '后3年专利数_后2年': patent_counts['后2年'],
-                    '后3年专利数_后3年': patent_counts['后3年'],
-                    '专利增长率': ((post_total - pre_total) / max(pre_total, 1)) * 100 if pre_total > 0 else 0
-                }
+                # 根据数据类型调整列名
+                if data_type == 'citation_count':
+                    # 被引证次数数据
+                    record = {
+                        '公司名称': company_name,
+                        '投资年份': investment_year,
+                        '投资时间': row['投资时间'],
+                        'treatment': treatment,
+                        '前3年被引证总数': pre_total,
+                        '投资当年被引证数': patent_counts['投资当年'],
+                        '后3年被引证总数': post_total,
+                        '前3年被引证数_前1年': patent_counts['前1年'],
+                        '前3年被引证数_前2年': patent_counts['前2年'],
+                        '前3年被引证数_前3年': patent_counts['前3年'],
+                        '后3年被引证数_后1年': patent_counts['后1年'],
+                        '后3年被引证数_后2年': patent_counts['后2年'],
+                        '后3年被引证数_后3年': patent_counts['后3年'],
+                        '被引证增长率': ((post_total - pre_total) / max(pre_total, 1)) * 100 if pre_total > 0 else 0
+                    }
+                else:
+                    # 专利数量数据
+                    record = {
+                        '公司名称': company_name,
+                        '投资年份': investment_year,
+                        '投资时间': row['投资时间'],
+                        'treatment': treatment,
+                        '前3年专利总数': pre_total,
+                        '投资当年专利数': patent_counts['投资当年'],
+                        '后3年专利总数': post_total,
+                        '前3年专利数_前1年': patent_counts['前1年'],
+                        '前3年专利数_前2年': patent_counts['前2年'],
+                        '前3年专利数_前3年': patent_counts['前3年'],
+                        '后3年专利数_后1年': patent_counts['后1年'],
+                        '后3年专利数_后2年': patent_counts['后2年'],
+                        '后3年专利数_后3年': patent_counts['后3年'],
+                        '专利增长率': ((post_total - pre_total) / max(pre_total, 1)) * 100 if pre_total > 0 else 0
+                    }
                 
                 if (patent_counts['前1年'] > 0) or (patent_counts['后1年'] > 0) or (patent_counts['前2年'] > 0) or (patent_counts['后2年'] > 0) or (patent_counts['前3年'] > 0) or (patent_counts['后3年'] > 0):
                     timeline_data.append(record)
@@ -133,11 +209,18 @@ def extract_regress_data():
         
         # 按treatment分组统计
         if 'treatment' in timeline_df.columns:
-            treatment_stats = timeline_df.groupby('treatment').agg({
-                '前3年专利总数': ['mean', 'median', 'sum'],
-                '后3年专利总数': ['mean', 'median', 'sum'],
-                '专利增长率': ['mean', 'median']
-            }).round(2)
+            if data_type == 'citation_count':
+                treatment_stats = timeline_df.groupby('treatment').agg({
+                    '前3年被引证总数': ['mean', 'median', 'sum'],
+                    '后3年被引证总数': ['mean', 'median', 'sum'],
+                    '被引证增长率': ['mean', 'median']
+                }).round(2)
+            else:
+                treatment_stats = timeline_df.groupby('treatment').agg({
+                    '前3年专利总数': ['mean', 'median', 'sum'],
+                    '后3年专利总数': ['mean', 'median', 'sum'],
+                    '专利增长率': ['mean', 'median']
+                }).round(2)
             
             print(f"\n8. Treatment分组统计:")
             print(treatment_stats)
@@ -145,23 +228,43 @@ def extract_regress_data():
         # 8. 保存数据
         print("9. 保存数据...")
         
+        # 根据数据类型生成不同的文件名
+        path = 'patent_analysis/'
+        if data_type == 'citation_count':
+            excel_filename = path +'regress_data_citations.xlsx'
+           
+            sheet_name_summary = '被引证次数数据统计'
+            sheet_name_yearly = '被引证次数按年份统计'
+        else:
+            excel_filename = path + 'regress_data_patents.xlsx'
+           
+            sheet_name_summary = '专利数量数据统计'
+            sheet_name_yearly = '专利数量按年份统计'
+        
         # 保存为Excel文件
-        excel_filename = 'regress_data.xlsx'
         with pd.ExcelWriter(excel_filename, engine='openpyxl') as writer:
             timeline_df.to_excel(writer, sheet_name='回归数据', index=False)
             
             # 创建汇总统计sheet
             summary_stats = timeline_df.describe()
-            summary_stats.to_excel(writer, sheet_name='数据统计')
+            summary_stats.to_excel(writer, sheet_name=sheet_name_summary)
             
             # 按年份统计
-            yearly_stats = timeline_df.groupby('投资年份').agg({
-                '前3年专利总数': 'mean',
-                '后3年专利总数': 'mean',
-                '专利增长率': 'mean',
-                'treatment': 'count'
-            }).round(2)
-            yearly_stats.to_excel(writer, sheet_name='按年份统计')
+            if data_type == 'citation_count':
+                yearly_stats = timeline_df.groupby('投资年份').agg({
+                    '前3年被引证总数': 'mean',
+                    '后3年被引证总数': 'mean',
+                    '被引证增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
+            else:
+                yearly_stats = timeline_df.groupby('投资年份').agg({
+                    '前3年专利总数': 'mean',
+                    '后3年专利总数': 'mean',
+                    '专利增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
+            yearly_stats.to_excel(writer, sheet_name=sheet_name_yearly)
         
         print(f"   - Excel文件已保存: {excel_filename}")
      
@@ -169,7 +272,8 @@ def extract_regress_data():
             'timeline_df': timeline_df,
             'excel_file': excel_filename,
             'total_companies': len(timeline_df),
-            'year_range': f"{timeline_df['投资年份'].min()} - {timeline_df['投资年份'].max()}"
+            'year_range': f"{timeline_df['投资年份'].min()} - {timeline_df['投资年份'].max()}",
+            'data_type': data_type
         }
         
     except FileNotFoundError as e:
@@ -181,9 +285,40 @@ def extract_regress_data():
         traceback.print_exc()
         return None
 
+def extract_regress_data_patents():
+    """
+    提取专利数量数据的便捷函数
+    """
+    return extract_regress_data(patent_data_file='company_patent_yearly.xlsx', data_type='patent_count')
+
+def extract_regress_data_citations():
+    """
+    提取被引证次数数据的便捷函数
+    """
+    return extract_regress_data(patent_data_file='company_patent_citations_yearly.xlsx', data_type='citation_count')
+
 if __name__ == "__main__":
-    # 提取投资前后专利时间序列数据
-    result = extract_regress_data()
+    print("=== 专利数量数据分析 ===")
+    # 提取投资前后专利数量时间序列数据
+    # result_patents = extract_regress_data_patents()
+    
+    print("\n" + "="*60)
+    print("=== 被引证次数数据分析 ===")
+    # 提取投资前后被引证次数时间序列数据
+    result_citations = extract_regress_data_citations()
+    
+    # 显示结果摘要
+    # if result_patents:
+    #     print(f"\n专利数量分析结果:")
+    #     print(f"  - 文件: {result_patents['excel_file']}")
+    #     print(f"  - 公司数: {result_patents['total_companies']}")
+    #     print(f"  - 年份范围: {result_patents['year_range']}")
+    
+    if result_citations:
+        print(f"\n被引证次数分析结果:")
+        print(f"  - 文件: {result_citations['excel_file']}")
+        print(f"  - 公司数: {result_citations['total_companies']}")
+        print(f"  - 年份范围: {result_citations['year_range']}")
     
     # 执行DID回归分析
     # result = perform_did_regression()

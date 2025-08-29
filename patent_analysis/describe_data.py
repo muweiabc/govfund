@@ -65,12 +65,14 @@ def print_describe_sequence(data: Union[List, np.ndarray, pd.Series]) -> None:
 
 # 示例用法
 if __name__ == "__main__":
-    df = pd.read_excel('regress_data_with_gdp.xlsx', sheet_name='回归数据') 
-    patent_pre_1 = df['前3年专利数_前1年']
-    patent_pre_2 = df['前3年专利数_前2年']
-    patent_pre_3 = df['前3年专利数_前3年']
-    patent_post_1 = df['后3年专利数_后1年']
-    patent_post_2 = df['后3年专利数_后2年']
-    patent_post_3 = df['后3年专利数_后3年']
-    patent = pd.concat([patent_pre_1, patent_pre_2, patent_pre_3, patent_post_1, patent_post_2, patent_post_3], axis=1)
-    print_describe_sequence(patent)
+    df = pd.read_excel('patent_analysis/regress_data_with_gdp.xlsx', sheet_name='回归数据') 
+    # patent_pre_1 = df['前3年专利数_前1年']
+    # patent_pre_2 = df['前3年专利数_前2年']
+    # patent_pre_3 = df['前3年专利数_前3年']
+    # patent_post_1 = df['后3年专利数_后1年']
+    # patent_post_2 = df['后3年专利数_后2年']
+    # patent_post_3 = df['后3年专利数_后3年']
+    # patent = pd.concat([patent_pre_1, patent_pre_2, patent_pre_3, patent_post_1, patent_post_2, patent_post_3], axis=0)
+    # print_describe_sequence(patent)
+
+    print_describe_sequence(np.log(df['投资当年GDP']))
