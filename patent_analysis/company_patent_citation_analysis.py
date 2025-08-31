@@ -154,7 +154,9 @@ def analyze_company_patent_citations():
     print("正在保存结果...")
     
     # 保存为Excel格式（便于查看）
-    result_df.to_excel('company_patent_citations_yearly.xlsx', sheet_name='被引证次数')
+    file = 'patent_analysis/company_patent_citations_yearly.xlsx'
+    
+    result_df.to_excel(file, sheet_name='被引证次数')
     
     # 保存为pickle格式（便于后续分析）
     with open('company_patent_citations_data.pkl', 'wb') as f:

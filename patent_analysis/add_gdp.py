@@ -2,7 +2,7 @@ import pandas as pd
 import re
 import numpy as np
 
-def extract_province_from_region(input_file='regress_data.xlsx', output_file=None):
+def extract_province_from_region(data_type, input_file='regress_data.xlsx', output_file=None):
     """
     读取指定的regress_data文件，找到每个公司在invest的地区列里的省份名，加到该行里
     
@@ -81,21 +81,35 @@ def extract_province_from_region(input_file='regress_data.xlsx', output_file=Non
             summary_stats.to_excel(writer, sheet_name='数据统计')
             
             # 按年份统计
-            yearly_stats = timeline_df.groupby('投资年份').agg({
-                '前3年专利总数': 'mean',
-                '后3年专利总数': 'mean',
-                '专利增长率': 'mean',
-                'treatment': 'count'
-            }).round(2)
+            if data_type == 'patent':
+                yearly_stats = timeline_df.groupby('投资年份').agg({
+                    '前3年专利总数': 'mean',
+                    '后3年专利总数': 'mean',
+                    '专利增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
+                province_stats = timeline_df.groupby('省份').agg({
+                    '前3年专利总数': ['mean', 'count'],
+                    '后3年专利总数': ['mean', 'count'],
+                    '专利增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
+            else:
+                yearly_stats = timeline_df.groupby('投资年份').agg({
+                    '前3年被引证总数': 'mean',
+                    '后3年被引证总数': 'mean',
+                    '被引证增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
+                province_stats = timeline_df.groupby('省份').agg({
+                    '前3年被引证总数': ['mean', 'count'],
+                    '后3年被引证总数': ['mean', 'count'],
+                    '被引证增长率': 'mean',
+                    'treatment': 'count'
+                }).round(2)
             yearly_stats.to_excel(writer, sheet_name='按年份统计')
-            
             # 按省份统计
-            province_stats = timeline_df.groupby('省份').agg({
-                '前3年专利总数': ['mean', 'count'],
-                '后3年专利总数': ['mean', 'count'],
-                '专利增长率': 'mean',
-                'treatment': 'count'
-            }).round(2)
+            
             province_stats.to_excel(writer, sheet_name='按省份统计')
         
         print(f"   - Excel文件已保存: {output_filename}")
@@ -143,7 +157,7 @@ def extract_province(region):
     
     return None
 
-def add_province_gdp_data(input_file='regress_data_with_province.xlsx', output_file=None):
+def add_province_gdp_data( input_file, output_file=None):
     """
     添加投资前三年，后三年所在省份的gdp数据
     

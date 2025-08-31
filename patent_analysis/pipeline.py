@@ -85,7 +85,7 @@ class PatentAnalysisPipeline:
             {
                 'name': '被引证次数回归数据准备',
                 'function': self.step_prepare_citation_data,
-                'input_files': ['invest.xlsx', 'patent_analysis/company_patent_citations_yearly.xlsx'],
+                'input_files': ['invest.xlsx', 'patent_analysis/company_citations_yearly.xlsx'],
                 'output_files': ['patent_analysis/regress_data_citations.xlsx'],
                 'description': '准备被引证次数回归分析数据',
                 'pipeline': 'citation'
@@ -152,7 +152,7 @@ class PatentAnalysisPipeline:
             print("步骤1: 专利数量分析")
             print("="*60)
             
-            result = analyze_company_patents()
+            result = analyze_company_patents('patents', 'patent_analysis/company_patent_yearly.xlsx')
             
             if result and result[0] is not None:
                 return True, "专利数量分析完成"
@@ -165,13 +165,14 @@ class PatentAnalysisPipeline:
     def step_citation_analysis(self):
         """步骤2: 被引证次数分析"""
         try:
-            from company_patent_citation_analysis import analyze_company_patent_citations
+            from company_patent_analysis import analyze_company_patents
             
             print("\n" + "="*60)
             print("步骤2: 被引证次数分析")
             print("="*60)
             
-            result = analyze_company_patent_citations()
+            result = analyze_company_patents('citations', 'patent_analysis/company_citations_yearly.xlsx')
+ 
             
             if result and result[0] is not None:
                 return True, "被引证次数分析完成"
@@ -229,6 +230,7 @@ class PatentAnalysisPipeline:
             print("="*60)
             
             result = extract_province_from_region(
+                data_type='patents',
                 input_file='patent_analysis/regress_data_patents.xlsx',
                 output_file='patent_analysis/regress_data_patents_with_province.xlsx'
             )
@@ -251,6 +253,7 @@ class PatentAnalysisPipeline:
             print("="*60)
             
             result = extract_province_from_region(
+                data_type='citations',
                 input_file='patent_analysis/regress_data_citations.xlsx',
                 output_file='patent_analysis/regress_data_citations_with_province.xlsx'
             )
@@ -273,6 +276,7 @@ class PatentAnalysisPipeline:
             print("="*60)
             
             result = add_province_gdp_data(
+              
                 input_file='patent_analysis/regress_data_patents_with_province.xlsx',
                 output_file='patent_analysis/regress_data_patents_with_gdp.xlsx'
             )
@@ -295,6 +299,7 @@ class PatentAnalysisPipeline:
             print("="*60)
             
             result = add_province_gdp_data(
+               
                 input_file='patent_analysis/regress_data_citations_with_province.xlsx',
                 output_file='patent_analysis/regress_data_citations_with_gdp.xlsx'
             )
@@ -308,15 +313,16 @@ class PatentAnalysisPipeline:
             return False, f"被引证次数数据GDP添加出错: {str(e)}"
     
     def step_did_regression_patents(self):
-        """步骤9: 专利数量DID回归分析"""
+        """专利数量DID回归分析"""
         try:
             from did import perform_did_regression_with_year_dummies
             
             print("\n" + "="*60)
-            print("步骤9: 专利数量DID回归分析")
+            print("专利数量DID回归分析")
             print("="*60)
             
             result = perform_did_regression_with_year_dummies(
+                data_type='patent',
                 input_file='patent_analysis/regress_data_patents_with_gdp.xlsx',
                 output_file='patent_analysis/did_panel_data_patents_with_year_dummies.xlsx'
             )
@@ -339,6 +345,7 @@ class PatentAnalysisPipeline:
             print("="*60)
             
             result = perform_did_regression_with_year_dummies(
+                data_type='citation',
                 input_file='patent_analysis/regress_data_citations_with_gdp.xlsx',
                 output_file='patent_analysis/did_panel_data_citations_with_year_dummies.xlsx'
             )

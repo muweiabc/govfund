@@ -5,7 +5,7 @@ import pickle
 import time
 from tqdm import tqdm
 
-def analyze_company_patents():
+def analyze_company_patents(data_type, output_file):
     """
     读取invest中的公司名，在t'ri'm'pa't'e'n't中查找该公司在各年份获得的专利数量
     使用稀疏矩阵存储结果，避免内存浪费
@@ -23,7 +23,7 @@ def analyze_company_patents():
     
     # 获取文件大小以估算行数
     import os
-    file = 'data/trimpatent_sample.csv'
+    file = 'data/trimpatent_all.csv'
     file_size = os.path.getsize(file)
     print(f"文件大小: {file_size / (1024**3):.2f} GB")
     
@@ -34,7 +34,7 @@ def analyze_company_patents():
     for chunk in tqdm(pd.read_csv(file, chunksize=chunk_size), 
                       desc="读取专利数据"):
         # 只保留需要的列
-        chunk = chunk[['申请人', '申请年份']].copy()
+        chunk = chunk[['申请人', '申请年份','被引证次数']].copy()
         patents_chunks.append(chunk)
     
     patents_df = pd.concat(patents_chunks, ignore_index=True)
@@ -49,7 +49,7 @@ def analyze_company_patents():
     patents_df['申请年份'] = patents_df['申请年份'].astype(int)
     
     # 获取年份范围
-    years = sorted(patents_df['申请年份'].unique())
+    years = sorted(patents_df['申请年份'].unique().astype(int))
     print(f"专利申请年份范围: {min(years)} - {max(years)}")
     
     # 4. 创建公司名称到索引的映射
@@ -65,13 +65,17 @@ def analyze_company_patents():
     start_time = time.time()
     
     # 按公司分组统计
-    company_patents = patents_df.groupby(['申请人', '申请年份']).size().reset_index(name='专利数量')
+    patents_df['被引证次数'] = patents_df['被引证次数'].astype(int)
+    if data_type == 'patents':
+        company_patents = patents_df.groupby(['申请人', '申请年份']).size().reset_index(name='专利数量')
+    else:
+        company_patents = patents_df.groupby(['申请人', '申请年份'])['被引证次数'].agg('sum').reset_index(name='被引证次数')
     
     print("正在构建稀疏矩阵数据...")
     for _, row in tqdm(company_patents.iterrows(), total=len(company_patents), desc="处理专利数据"):
         company = row['申请人']
         year = row['申请年份']
-        count = row['专利数量']
+        count = row['专利数量'] if data_type == 'patents' else row['被引证次数']
         
         # 如果公司在我们的列表中
         if company in company_to_idx:
@@ -88,13 +92,18 @@ def analyze_company_patents():
                               shape=(len(company_names), len(years)))
     
     # 保存为CSV格式（便于查看）
-    print("正在保存CSV格式...")
+    print("正在保存...")
+    years_str = ['y' + str(year) for year in years]
     result_df = pd.DataFrame(
         sparse_matrix.toarray(),
         index=company_names,
-        columns=years
+        columns=years_str
     )
-    result_df.to_excel('company_patent_yearly.xlsx', sheet_name='原始数据')
+    if data_type == 'patents':
+        sheet_name = '有专利公司'
+    else:
+        sheet_name = '被引证次数'
+    result_df.to_excel(output_file, sheet_name=sheet_name)
     
     # 9. 输出统计信息
     print("\n=== 分析结果 ===")
@@ -119,8 +128,7 @@ def analyze_company_patents():
     
     print(f"\n分析完成，耗时: {time.time() - start_time:.2f} 秒")
     print("结果已保存到:")
-    print("- company_patent_matrix.pkl (稀疏矩阵)")
-    print("- company_patent_yearly.csv (CSV格式)")
+    print(output_file)
     
     return sparse_matrix, company_names, years
 
@@ -191,14 +199,14 @@ def query_company_patents(company_name):
 
 if __name__ == "__main__":
     # 运行分析
-    sparse_matrix, company_names, years = analyze_company_patents()
+    # sparse_matrix, company_names, years = analyze_company_patents()
     
-    # 演示查询功能
+    # # 演示查询功能
     print("\n" + "="*50)
-    print("演示查询功能:")
-    load_and_query_results()
+    # print("演示查询功能:")
+    # load_and_query_results()
     
-    # 查询特定公司
-    print("\n" + "="*50)
-    print("查询特定公司专利:")
-    query_company_patents("北京蓝晶微生物科技有限公司")
+    # # 查询特定公司
+    # print("\n" + "="*50)
+    # print("查询特定公司专利:")
+    # query_company_patents("北京蓝晶微生物科技有限公司")
