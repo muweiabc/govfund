@@ -424,20 +424,74 @@ def regress():
             print("\n=== 回归分析结果 ===")
             print(results)
             
-            # 显示关键统计信息
-            # print(f"\n关键统计信息:")
-            # print(f"  R²: {results.rsquared:.4f}")
-            # print(f"  调整R²: {results.rsquared_adj:.4f}")
-            # print(f"  F统计量: {results.fvalue:.4f}")
-            # print(f"  F统计量p值: {results.f_pvalue:.4f}")
+            # 输出回归变量和结果到Excel文件
+            print("\n正在输出回归变量和结果到growth_panel.xlsx...")
             
-            # # 显示系数
-            # print(f"\n回归系数:")
-            # for param, value in results.params.items():
-            #     if param in results.pvalues.index:
-            #         p_value = results.pvalues[param]
-            #         t_value = results.tvalues[param]
-            #         print(f"  {param}: {value:.4f} (t={t_value:.4f}, p={p_value:.4f})")
+            # 准备回归结果数据
+            regression_results = {
+                '变量': [],
+                '系数': [],
+                '标准误': [],
+                't值': [],
+                'p值': [],
+                '显著性': []
+            }
+            
+            # 添加回归系数和统计信息
+            for param in results.params.index:
+                regression_results['变量'].append(param)
+                regression_results['系数'].append(results.params[param])
+                regression_results['标准误'].append(results.std_errors[param])
+                regression_results['t值'].append(results.tstats[param])
+                regression_results['p值'].append(results.pvalues[param])
+                
+                # 添加显著性标记
+                p_val = results.pvalues[param]
+                if p_val < 0.01:
+                    regression_results['显著性'].append('***')
+                elif p_val < 0.05:
+                    regression_results['显著性'].append('**')
+                elif p_val < 0.1:
+                    regression_results['显著性'].append('*')
+                else:
+                    regression_results['显著性'].append('')
+            
+            # 添加模型统计信息
+            regression_results['变量'].extend(['', 'R²', '组内变异解释程度', 'F统计量', 'F统计量p值', '观测数'])
+            regression_results['系数'].extend(['', results.rsquared, results.rsquared_within, results.f_statistic.stat, results.f_statistic.pval, results.nobs])
+            regression_results['标准误'].extend(['', '', '', '', '', ''])
+            regression_results['t值'].extend(['', '', '', '', '', ''])
+            regression_results['p值'].extend(['', '', '', '', '', ''])
+            regression_results['显著性'].extend(['', '', '', '', '', ''])
+            
+            # 创建回归结果DataFrame
+            results_df = pd.DataFrame(regression_results)
+            
+            # 准备面板数据（包含所有变量）
+            panel_output_df = panel_df.reset_index()
+            
+            # 创建Excel文件
+            with pd.ExcelWriter('growth_panel.xlsx', engine='openpyxl') as writer:
+                # 输出面板数据
+                panel_output_df.to_excel(writer, sheet_name='面板数据', index=False)
+                
+                # 输出回归结果
+                results_df.to_excel(writer, sheet_name='回归结果', index=False)
+                
+                # 输出描述性统计
+                desc_stats = panel_df.describe()
+                desc_stats.to_excel(writer, sheet_name='描述性统计')
+                
+                # 输出相关性矩阵
+                corr_matrix = panel_df.corr()
+                corr_matrix.to_excel(writer, sheet_name='相关性矩阵')
+            
+            print("✓ 成功输出到growth_panel.xlsx")
+            print(f"  包含以下工作表:")
+            print(f"    - 面板数据: 包含所有回归变量和因变量")
+            print(f"    - 回归结果: 包含回归系数、标准误、t值、p值和显著性")
+            print(f"    - 描述性统计: 各变量的统计描述")
+            print(f"    - 相关性矩阵: 变量间的相关性")
             
         except Exception as e:
             print(f"✗ 错误: 执行回归分析时发生异常: {e}")
