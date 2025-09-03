@@ -50,11 +50,12 @@ def prepare_panel_data(data_type, df):
                         'post': 0,  # 投资前
                         'patent_count': patent_count,
                         'ln_patents_plus_1': np.log(patent_count + 1),
-                        'province': province,
+                        '省份': province,
                         'gdp': gdp_value,
                         'ln_gdp': ln_gdp,
                         'time_to_investment': year_offset,
-                        'period': 'pre'
+                        'period': 'pre',
+                        '投资阶段':row['投资阶段']
                     })
                 else:
                     citations = row[f'前3年被引证数_前{year_offset}年']
@@ -69,11 +70,12 @@ def prepare_panel_data(data_type, df):
                         'post': 0,  # 投资前
                         'citation_count': citations,
                         'ln_citations_plus_1': np.log(citations + 1),
-                        'province': province,
+                        '省份': province,
                         'gdp': gdp_value,
                         'ln_gdp': ln_gdp,
                         'time_to_investment': year_offset,
-                        'period': 'pre'
+                        'period': 'pre',
+                        '投资阶段':row['投资阶段']
                     })
         
         # 后3年数据 (post=1)
@@ -93,11 +95,12 @@ def prepare_panel_data(data_type, df):
                         'post': 1,  # 投资后
                         'patent_count': patent_count,
                         'ln_patents_plus_1': np.log(patent_count + 1),
-                        'province': province,
+                        '省份': province,
                         'gdp': gdp_value,
                         'ln_gdp': ln_gdp,
                         'time_to_investment': -year_offset,
-                        'period': 'post'
+                        'period': 'post',
+                        '投资阶段':row['投资阶段']
                     })
                 else:
                     citations = row[f'后3年被引证数_后{year_offset}年']
@@ -112,11 +115,12 @@ def prepare_panel_data(data_type, df):
                         'post': 1,  # 投资后
                         'citation_count': citations,
                         'ln_citations_plus_1': np.log(citations + 1),
-                        'province': province,
+                        '省份': province,
                         'gdp': gdp_value,
                         'ln_gdp': ln_gdp,
                         'time_to_investment': -year_offset,
-                        'period': 'post'
+                        'period': 'post',
+                        '投资阶段':row['投资阶段']
                     })
     
     # 创建面板数据框
@@ -142,7 +146,7 @@ def prepare_panel_data(data_type, df):
     return panel_df
 
 
-def generate_dummy_variables(panel_df, enable_province_dummies=True):
+def generate_dummy_variables(panel_df, enable_province_dummies=True, enable_stage_dummies=True):
     """
     生成虚拟变量
     
@@ -163,22 +167,20 @@ def generate_dummy_variables(panel_df, enable_province_dummies=True):
     panel_df['treatment_post'] = panel_df['treatment'] * panel_df['post']
     
     # 创建省份虚拟变量（如果启用）
-    province_dummy_cols = []
     if enable_province_dummies:
         print("   - 创建省份虚拟变量...")
-        provinces = panel_df['province'].unique()
+        provinces = panel_df['省份'].unique()
         base_province = provinces[0]
         print(f"   - 基准省份: {base_province}")
         
-        for province in provinces[1:]:
-            panel_df[f'province_{province}'] = (panel_df['province'] == province).astype(int)
+        # 使用pd.get_dummies创建省份虚拟变量
+        panel_dummies = pd.get_dummies(panel_df, columns=['省份','投资阶段'], prefix=['省','投资阶段'], drop_first=True)
         
-        province_dummy_cols = [col for col in panel_df.columns if col.startswith('province_')]
-        print(f"   - 省份虚拟变量数量: {len(province_dummy_cols)}")
+        
     else:
         print("   - 省份虚拟变量已禁用")
     
-    return panel_df, province_dummy_cols
+    return panel_dummies
 
 
 def perform_regression(data_type, panel_df, province_dummy_cols, enable_province_dummies=True):
@@ -293,7 +295,7 @@ def perform_regression(data_type, panel_df, province_dummy_cols, enable_province
         return None, []
 
 
-def perform_did_regression_with_year_dummies(data_type, input_file='regress_data_with_gdp.xlsx', output_file=None, enable_province_dummies=True, use_time_effects=True):
+def perform_did_regression(data_type, input_file, output_file=None, enable_province_dummies=True, use_time_effects=True):
     """
     根据patent_investment_timeline_with_province_gdp数据做DID回归
     被解释变量是公司某年的ln(专利数+1)
@@ -319,7 +321,7 @@ def perform_did_regression_with_year_dummies(data_type, input_file='regress_data
         panel_df = prepare_panel_data(data_type, df)
         
         # 3. 生成虚拟变量
-        panel_df, province_dummy_cols = generate_dummy_variables(panel_df, enable_province_dummies)
+        panel_df = generate_dummy_variables(panel_df, enable_province_dummies)
         
         # 4. 执行回归分析
         results, significant_province_dummies = perform_regression(data_type, panel_df, province_dummy_cols, enable_province_dummies)
@@ -461,7 +463,10 @@ def perform_did_regression_with_year_dummies(data_type, input_file='regress_data
 if __name__ == "__main__":
     # 执行带年份虚拟变量的DID回归分析
     # 可以通过参数控制是否启用省份虚拟变量和时间虚拟变量
-    result = perform_did_regression_with_year_dummies(
+    result = perform_did_regression(
+        data_type='patent',
+        input_file='patent_analysis/regress_data_patents.xlsx',
+        output_file='patent_analysis/did_panel_data_patents.xlsx',
         enable_province_dummies=True,  # 启用省份虚拟变量
         use_time_effects=True       # 启用年份虚拟变量
     )

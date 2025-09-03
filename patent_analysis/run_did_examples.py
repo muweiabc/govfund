@@ -7,7 +7,7 @@ DID回归示例脚本
 
 from did import (
     perform_did_regression_with_gdp,
-    perform_did_regression_with_year_dummies
+    perform_did_regression
 )
 
 def run_did_examples():
@@ -59,7 +59,7 @@ def run_did_examples():
     print("示例3: 带年份虚拟变量的DID回归")
     print("="*60)
     
-    result3 = perform_did_regression_with_year_dummies(
+    result3 = perform_did_regression(
         enable_province_dummies=False,  # 禁用省份虚拟变量
         enable_time_dummies=True        # 启用年份虚拟变量
     )
@@ -79,7 +79,7 @@ def run_did_examples():
     print("示例4: 完整DID回归（包含年份和省份虚拟变量）")
     print("="*60)
     
-    result4 = perform_did_regression_with_year_dummies(
+    result4 = perform_did_regression(
         enable_province_dummies=True,   # 启用省份虚拟变量
         enable_time_dummies=True        # 启用年份虚拟变量
     )

@@ -49,26 +49,10 @@ class PatentAnalysisPipeline:
                 'pipeline': 'patent'
             },
             {
-                'name': '专利数量数据添加省份信息',
-                'function': self.step_add_province_patents,
-                'input_files': ['invest.xlsx', 'patent_analysis/regress_data_patents.xlsx'],
-                'output_files': ['patent_analysis/regress_data_patents_with_province.xlsx'],
-                'description': '为专利数量数据添加省份信息',
-                'pipeline': 'patent'
-            },
-            {
-                'name': '专利数量数据添加GDP数据',
-                'function': self.step_add_gdp_patents,
-                'input_files': ['gdp.xlsx', 'patent_analysis/regress_data_patents_with_province.xlsx'],
-                'output_files': ['patent_analysis/regress_data_patents_with_gdp.xlsx'],
-                'description': '为专利数量数据添加GDP控制变量',
-                'pipeline': 'patent'
-            },
-            {
                 'name': '专利数量DID回归分析',
                 'function': self.step_did_regression_patents,
-                'input_files': ['patent_analysis/regress_data_patents_with_gdp.xlsx'],
-                'output_files': ['patent_analysis/did_panel_data_patents_with_year_dummies.xlsx'],
+                'input_files': ['patent_analysis/regress_data_patents.xlsx'],
+                'output_files': ['patent_analysis/did_panel_data_patents.xlsx'],
                 'description': '执行专利数量DID回归分析',
                 'pipeline': 'patent'
             },
@@ -90,27 +74,12 @@ class PatentAnalysisPipeline:
                 'description': '准备被引证次数回归分析数据',
                 'pipeline': 'citation'
             },
-            {
-                'name': '被引证次数数据添加省份信息',
-                'function': self.step_add_province_citations,
-                'input_files': ['invest.xlsx', 'patent_analysis/regress_data_citations.xlsx'],
-                'output_files': ['patent_analysis/regress_data_citations_with_province.xlsx'],
-                'description': '为被引证次数数据添加省份信息',
-                'pipeline': 'citation'
-            },
-            {
-                'name': '被引证次数数据添加GDP数据',
-                'function': self.step_add_gdp_citations,
-                'input_files': ['gdp.xlsx', 'patent_analysis/regress_data_citations_with_province.xlsx'],
-                'output_files': ['patent_analysis/regress_data_citations_with_gdp.xlsx'],
-                'description': '为被引证次数数据添加GDP控制变量',
-                'pipeline': 'citation'
-            },
+           
             {
                 'name': '被引证次数DID回归分析',
                 'function': self.step_did_regression_citations,
-                'input_files': ['patent_analysis/regress_data_citations_with_gdp.xlsx'],
-                'output_files': ['patent_analysis/did_panel_data_citations_with_year_dummies.xlsx'],
+                'input_files': ['patent_analysis/regress_data_citations.xlsx'],
+                'output_files': ['patent_analysis/did_panel_data_citations.xlsx'],
                 'description': '执行被引证次数DID回归分析',
                 'pipeline': 'citation'
             }
@@ -219,112 +188,20 @@ class PatentAnalysisPipeline:
                 
         except Exception as e:
             return False, f"被引证次数回归数据准备出错: {str(e)}"
-    
-    def step_add_province_patents(self):
-        """步骤5: 专利数量数据添加省份信息"""
-        try:
-            from add_gdp import extract_province_from_region
-            
-            print("\n" + "="*60)
-            print("步骤5: 专利数量数据添加省份信息")
-            print("="*60)
-            
-            result = extract_province_from_region(
-                data_type='patents',
-                input_file='patent_analysis/regress_data_patents.xlsx',
-                output_file='patent_analysis/regress_data_patents_with_province.xlsx'
-            )
-            
-            if result:
-                return True, f"专利数量数据省份信息添加完成，输出文件: {result['excel_file']}"
-            else:
-                return False, "专利数量数据省份信息添加失败"
-                
-        except Exception as e:
-            return False, f"专利数量数据省份信息添加出错: {str(e)}"
-    
-    def step_add_province_citations(self):
-        """步骤6: 被引证次数数据添加省份信息"""
-        try:
-            from add_gdp import extract_province_from_region
-            
-            print("\n" + "="*60)
-            print("步骤6: 被引证次数数据添加省份信息")
-            print("="*60)
-            
-            result = extract_province_from_region(
-                data_type='citations',
-                input_file='patent_analysis/regress_data_citations.xlsx',
-                output_file='patent_analysis/regress_data_citations_with_province.xlsx'
-            )
-            
-            if result:
-                return True, f"被引证次数数据省份信息添加完成，输出文件: {result['excel_file']}"
-            else:
-                return False, "被引证次数数据省份信息添加失败"
-                
-        except Exception as e:
-            return False, f"被引证次数数据省份信息添加出错: {str(e)}"
-    
-    def step_add_gdp_patents(self):
-        """步骤7: 专利数量数据添加GDP数据"""
-        try:
-            from add_gdp import add_province_gdp_data
-            
-            print("\n" + "="*60)
-            print("步骤7: 专利数量数据添加GDP数据")
-            print("="*60)
-            
-            result = add_province_gdp_data(
-              
-                input_file='patent_analysis/regress_data_patents_with_province.xlsx',
-                output_file='patent_analysis/regress_data_patents_with_gdp.xlsx'
-            )
-            
-            if result:
-                return True, f"专利数量数据GDP添加完成，输出文件: {result['excel_file']}"
-            else:
-                return False, "专利数量数据GDP添加失败"
-                
-        except Exception as e:
-            return False, f"专利数量数据GDP添加出错: {str(e)}"
-    
-    def step_add_gdp_citations(self):
-        """步骤8: 被引证次数数据添加GDP数据"""
-        try:
-            from add_gdp import add_province_gdp_data
-            
-            print("\n" + "="*60)
-            print("步骤8: 被引证次数数据添加GDP数据")
-            print("="*60)
-            
-            result = add_province_gdp_data(
-               
-                input_file='patent_analysis/regress_data_citations_with_province.xlsx',
-                output_file='patent_analysis/regress_data_citations_with_gdp.xlsx'
-            )
-            
-            if result:
-                return True, f"被引证次数数据GDP添加完成，输出文件: {result['excel_file']}"
-            else:
-                return False, "被引证次数数据GDP添加失败"
-                
-        except Exception as e:
-            return False, f"被引证次数数据GDP添加出错: {str(e)}"
-    
+   
     def step_did_regression_patents(self):
         """专利数量DID回归分析"""
         try:
-            from did import perform_did_regression_with_year_dummies
+            from did import perform_did_regression
             
             print("\n" + "="*60)
             print("专利数量DID回归分析")
             print("="*60)
             
-            result = perform_did_regression_with_year_dummies(
+            result = perform_did_regression(
                 data_type='patent',
-                input_file='patent_analysis/regress_data_patents_with_gdp.xlsx',
-                output_file='patent_analysis/did_panel_data_patents_with_year_dummies.xlsx'
+                input_file='patent_analysis/regress_data_patents.xlsx',
+                output_file='patent_analysis/did_panel_data_patents.xlsx'
             )
             
             if result:
@@ -338,16 +215,16 @@ class PatentAnalysisPipeline:
     def step_did_regression_citations(self):
         """步骤10: 被引证次数DID回归分析"""
         try:
-            from did import perform_did_regression_with_year_dummies
+            from did import perform_did_regression
             
             print("\n" + "="*60)
             print("步骤10: 被引证次数DID回归分析")
             print("="*60)
             
-            result = perform_did_regression_with_year_dummies(
+            result = perform_did_regression(
                 data_type='citation',
-                input_file='patent_analysis/regress_data_citations_with_gdp.xlsx',
-                output_file='patent_analysis/did_panel_data_citations_with_year_dummies.xlsx'
+                input_file='patent_analysis/regress_data_citations.xlsx',
+                output_file='patent_analysis/did_panel_data_citations.xlsx'
             )
             
             if result:

@@ -18,14 +18,14 @@ def test_did_function_signature():
     print("=" * 60)
     
     try:
-        from did import perform_did_regression_with_year_dummies
+        from did import perform_did_regression
         
         print("✅ did模块导入成功")
         
         # 检查函数签名
         import inspect
         
-        sig = inspect.signature(perform_did_regression_with_year_dummies)
+        sig = inspect.signature(perform_did_regression)
         print(f"函数签名: {sig}")
         
         # 检查参数
@@ -104,13 +104,13 @@ def test_did_function_parameters():
     print("=" * 60)
     
     try:
-        from did import perform_did_regression_with_year_dummies
+        from did import perform_did_regression
         import inspect
         
         # 测试默认参数
         print("测试默认参数调用...")
         # 注意：这里只是测试函数签名，不实际执行
-        sig = inspect.signature(perform_did_regression_with_year_dummies)
+        sig = inspect.signature(perform_did_regression)
         
         # 检查默认值
         input_file_default = sig.parameters['input_file'].default

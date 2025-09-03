@@ -22,14 +22,14 @@ def test_function_imports():
             prepare_panel_data, 
             generate_dummy_variables, 
             perform_regression,
-            perform_did_regression_with_year_dummies
+            perform_did_regression
         )
         
         print("✅ 所有函数导入成功")
         print(f"  - prepare_panel_data: {prepare_panel_data}")
         print(f"  - generate_dummy_variables: {generate_dummy_variables}")
         print(f"  - perform_regression: {perform_regression}")
-        print(f"  - perform_did_regression_with_year_dummies: {perform_did_regression_with_year_dummies}")
+        print(f"  - perform_did_regression_with_year_dummies: {perform_did_regression}")
         
         return True
         
@@ -51,7 +51,7 @@ def test_function_signatures():
             prepare_panel_data, 
             generate_dummy_variables, 
             perform_regression,
-            perform_did_regression_with_year_dummies
+            perform_did_regression
         )
         
         # 检查函数签名
@@ -59,7 +59,7 @@ def test_function_signatures():
             ("prepare_panel_data", prepare_panel_data),
             ("generate_dummy_variables", generate_dummy_variables),
             ("perform_regression", perform_regression),
-            ("perform_did_regression_with_year_dummies", perform_did_regression_with_year_dummies)
+            ("perform_did_regression_with_year_dummies", perform_did_regression)
         ]
         
         for name, func in functions:
@@ -89,14 +89,14 @@ def test_function_documentation():
             prepare_panel_data, 
             generate_dummy_variables, 
             perform_regression,
-            perform_did_regression_with_year_dummies
+            perform_did_regression
         )
         
         functions = [
             ("prepare_panel_data", prepare_panel_data),
             ("generate_dummy_variables", generate_dummy_variables),
             ("perform_regression", perform_regression),
-            ("perform_did_regression_with_year_dummies", perform_did_regression_with_year_dummies)
+            ("perform_did_regression_with_year_dummies", perform_did_regression)
         ]
         
         for name, func in functions:
@@ -128,10 +128,10 @@ def test_main_function_parameters():
     print("=" * 60)
     
     try:
-        from did import perform_did_regression_with_year_dummies
+        from did import perform_did_regression
         import inspect
         
-        sig = inspect.signature(perform_did_regression_with_year_dummies)
+        sig = inspect.signature(perform_did_regression)
         params = list(sig.parameters.keys())
         
         print(f"主函数参数: {params}")
