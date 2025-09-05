@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import sys
 
 def filter_data():
     provinces = set(['上海市', '天津市', '江苏省', '浙江省', '广东省', '重庆市', '北京市', '福建省', '河北省',
@@ -24,6 +25,11 @@ def prepare_panel_data(data_type, df):
     """
     print("2. 创建面板数据结构...")
     
+    sys.path.append('.')
+    from growth_regress import read_urban,read_fixed_invest,convert_province
+    urban_df = read_urban()
+    investment_result = read_fixed_invest()
+
     # 创建前3年和后3年的观测值
     panel_data = []
     
@@ -41,7 +47,11 @@ def prepare_panel_data(data_type, df):
                     patent_count = row[f'前3年专利数_前{year_offset}年']
                     gdp_value = row[f'前3年GDP_前{year_offset}年']
                     ln_gdp = row[f'ln_前3年GDP_前{year_offset}年']
-                
+                    province = convert_province(province)
+                    if str(year) not in urban_df.columns:
+                        print('year not in urban_df.columns')
+                    urban_rate = urban_df.loc[province, str(year)]
+
                     panel_data.append({
                         'company': company,
                         'year': year,
@@ -55,7 +65,8 @@ def prepare_panel_data(data_type, df):
                         'ln_gdp': ln_gdp,
                         'time_to_investment': year_offset,
                         'period': 'pre',
-                        '投资阶段':row['投资阶段']
+                        '投资阶段':row['投资阶段'],
+                        '城镇化率':urban_rate
                     })
                 else:
                     citations = row[f'前3年被引证数_前{year_offset}年']
@@ -75,7 +86,8 @@ def prepare_panel_data(data_type, df):
                         'ln_gdp': ln_gdp,
                         'time_to_investment': year_offset,
                         'period': 'pre',
-                        '投资阶段':row['投资阶段']
+                        '投资阶段':row['投资阶段'],
+                        '城镇化率':urban_rate
                     })
         
         # 后3年数据 (post=1)
@@ -100,7 +112,8 @@ def prepare_panel_data(data_type, df):
                         'ln_gdp': ln_gdp,
                         'time_to_investment': -year_offset,
                         'period': 'post',
-                        '投资阶段':row['投资阶段']
+                        '投资阶段':row['投资阶段'],
+                        '城镇化率':urban_rate
                     })
                 else:
                     citations = row[f'后3年被引证数_后{year_offset}年']
@@ -120,7 +133,8 @@ def prepare_panel_data(data_type, df):
                         'ln_gdp': ln_gdp,
                         'time_to_investment': -year_offset,
                         'period': 'post',
-                        '投资阶段':row['投资阶段']
+                        '投资阶段':row['投资阶段'],
+                        '城镇化率':urban_rate
                     })
     
     # 创建面板数据框
@@ -146,7 +160,7 @@ def prepare_panel_data(data_type, df):
     return panel_df
 
 
-def generate_dummy_variables(panel_df, enable_province_dummies=True, enable_stage_dummies=True):
+def _generate_dummy_variables(panel_df, enable_dummies=True):
     """
     生成虚拟变量
     
@@ -156,7 +170,7 @@ def generate_dummy_variables(panel_df, enable_province_dummies=True, enable_stag
     
     返回:
     panel_df: 添加了虚拟变量的DataFrame
-    province_dummy_cols: 省份虚拟变量列名列表
+    dummy_cols: 省份虚拟变量列名列表
     """
     print("6. 生成虚拟变量...")
     
@@ -167,29 +181,29 @@ def generate_dummy_variables(panel_df, enable_province_dummies=True, enable_stag
     panel_df['treatment_post'] = panel_df['treatment'] * panel_df['post']
     
     # 创建省份虚拟变量（如果启用）
-    if enable_province_dummies:
-        print("   - 创建省份虚拟变量...")
-        provinces = panel_df['省份'].unique()
-        base_province = provinces[0]
-        print(f"   - 基准省份: {base_province}")
+    if enable_dummies:
+        print("   - 创建虚拟变量...")
         
         # 使用pd.get_dummies创建省份虚拟变量
         panel_dummies = pd.get_dummies(panel_df, columns=['省份','投资阶段'], prefix=['省','投资阶段'], drop_first=True)
-        
-        
+
     else:
-        print("   - 省份虚拟变量已禁用")
-    
-    return panel_dummies
+        print("   -虚拟变量已禁用")
+
+    dummy_cols = []
+    for col in panel_dummies.columns:
+        if col.startswith('省') or col.startswith('投资阶段'):
+            dummy_cols.append(col)
+    return panel_dummies,dummy_cols
 
 
-def perform_regression(data_type, panel_df, province_dummy_cols, enable_province_dummies=True):
+def _perform_regression(data_type, panel_df, dummy_cols, enable_dummies=True):
     """
     执行DID回归分析
     
     参数:
     panel_df: 面板数据DataFrame
-    province_dummy_cols: 省份虚拟变量列名列表
+    dummy_cols: 省份虚拟变量列名列表
     enable_province_dummies: 是否启用省份虚拟变量
     
     返回:
@@ -202,10 +216,10 @@ def perform_regression(data_type, panel_df, province_dummy_cols, enable_province
         from linearmodels import PanelOLS
         
         # 准备回归变量
-        control_vars = ['treatment','treatment_post', 'ln_gdp']
+        control_vars = ['treatment','treatment_post', 'ln_gdp','城镇化率']
         
-        # if enable_province_dummies:
-        #     control_vars += province_dummy_cols
+        if enable_dummies:
+            control_vars += dummy_cols
         
         X = panel_df[control_vars]
         if data_type == 'patent':
@@ -216,8 +230,8 @@ def perform_regression(data_type, panel_df, province_dummy_cols, enable_province
         print(f"   - 回归变量数量: {len(control_vars)}")
         control_desc = "GDP"
         
-        if enable_province_dummies:
-            control_desc = f"{len(province_dummy_cols)} 个省份虚拟变量 + " + control_desc
+        if enable_dummies:
+            control_desc = f"{len(dummy_cols)} 个省份虚拟变量 + " + control_desc
         print(f"   - 控制变量: {control_desc}")
         
         # 执行PanelOLS回归
@@ -247,9 +261,9 @@ def perform_regression(data_type, panel_df, province_dummy_cols, enable_province
         
         # 显示省份虚拟变量的显著性（如果启用）
         significant_province_dummies = []
-        if enable_province_dummies:
+        if enable_dummies:
             print(f"\n10. 省份虚拟变量显著性:")
-            for col in province_dummy_cols:
+            for col in dummy_cols:
                 if col in results.params.index:
                     p_value = results.pvalues[col]
                     if p_value < 0.05:
@@ -295,7 +309,7 @@ def perform_regression(data_type, panel_df, province_dummy_cols, enable_province
         return None, []
 
 
-def perform_did_regression(data_type, input_file, output_file=None, enable_province_dummies=True, use_time_effects=True):
+def perform_did_regression(data_type, input_file, output_file=None, enable_dummies=True, use_time_effects=True):
     """
     根据patent_investment_timeline_with_province_gdp数据做DID回归
     被解释变量是公司某年的ln(专利数+1)
@@ -321,10 +335,10 @@ def perform_did_regression(data_type, input_file, output_file=None, enable_provi
         panel_df = prepare_panel_data(data_type, df)
         
         # 3. 生成虚拟变量
-        panel_df = generate_dummy_variables(panel_df, enable_province_dummies)
+        panel_df, dummy_cols = _generate_dummy_variables(panel_df, enable_dummies)
         
         # 4. 执行回归分析
-        results, significant_province_dummies = perform_regression(data_type, panel_df, province_dummy_cols, enable_province_dummies)
+        results, significant_province_dummies = _perform_regression(data_type, panel_df, dummy_cols, enable_dummies)
         
         if results is None:
             return None
@@ -429,13 +443,13 @@ def perform_did_regression(data_type, input_file, output_file=None, enable_provi
             print(f"   - DID效应摘要已保存到'DID效应摘要'工作表")
             
             # 保存省份虚拟变量信息
-            if enable_province_dummies and province_dummy_cols:
+            if enable_dummies and dummy_cols:
                 province_info = pd.DataFrame({
-                    '省份虚拟变量': province_dummy_cols,
-                    '系数': [results.params.get(col, np.nan) for col in province_dummy_cols],
-                    't值': [results.tstats.get(col, np.nan) for col in province_dummy_cols],
-                    'p值': [results.pvalues.get(col, np.nan) for col in province_dummy_cols],
-                    '显著性': ['显著' if results.pvalues.get(col, 1) < 0.05 else '不显著' for col in province_dummy_cols]
+                    '省份虚拟变量': dummy_cols,
+                    '系数': [results.params.get(col, np.nan) for col in dummy_cols],
+                    't值': [results.tstats.get(col, np.nan) for col in dummy_cols],
+                    'p值': [results.pvalues.get(col, np.nan) for col in dummy_cols],
+                    '显著性': ['显著' if results.pvalues.get(col, 1) < 0.05 else '不显著' for col in dummy_cols]
                 })
                 province_info.to_excel(writer, sheet_name='省份虚拟变量', index=False)
                 print(f"   - 省份虚拟变量信息已保存到'省份虚拟变量'工作表")
@@ -449,7 +463,7 @@ def perform_did_regression(data_type, input_file, output_file=None, enable_provi
             'did_t_value': results.tstats['treatment_post'],
             'did_p_value': results.pvalues['treatment_post'],
             'gdp_effect': results.params['ln_gdp'],
-            'province_dummy_count': len(province_dummy_cols) if enable_province_dummies else 0,
+            'province_dummy_count': len(dummy_cols) if enable_dummies else 0,
             'significant_province_dummies': len(significant_province_dummies),
             'panel_file': output_filename
         }
@@ -467,7 +481,7 @@ if __name__ == "__main__":
         data_type='patent',
         input_file='patent_analysis/regress_data_patents.xlsx',
         output_file='patent_analysis/did_panel_data_patents.xlsx',
-        enable_province_dummies=True,  # 启用省份虚拟变量
+        enable_dummies=True,  # 启用省份虚拟变量
         use_time_effects=True       # 启用年份虚拟变量
     )
     

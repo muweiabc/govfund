@@ -283,7 +283,7 @@ def regress():
             print("\n文件检查失败，程序终止")
             return
         
-        # 读取数据
+        # 读取人均GDP数据
         gdp_df = read_gdp_data()
         if gdp_df is None:
             print("\n无法读取GDP数据，程序终止")
