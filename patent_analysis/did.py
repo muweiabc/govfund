@@ -13,7 +13,7 @@ def filter_data():
         df.to_excel(writer, sheet_name='回归数据')
 
 
-def prepare_panel_data(data_type, df):
+def prepare_panel_data(data_type):
     """
     准备面板数据结构
     
@@ -23,12 +23,13 @@ def prepare_panel_data(data_type, df):
     返回:
     panel_df: 面板数据DataFrame
     """
-    print("2. 创建面板数据结构...")
-    
+    file = 'patent_analysis/regress_data_patents.xlsx' if data_type == 'patent' else 'patent_analysis/regress_data_citations.xlsx'
+    df = pd.read_excel(file, sheet_name='回归数据')
+
     sys.path.append('.')
-    from growth_regress import read_urban,read_fixed_invest,convert_province
+    from growth_regress import read_urban,read_fixed_invest
     urban_df = read_urban()
-    investment_result = read_fixed_invest()
+    investment_df, investment_col = read_fixed_invest()
 
     # 创建前3年和后3年的观测值
     panel_data = []
@@ -43,15 +44,13 @@ def prepare_panel_data(data_type, df):
         for year_offset in range(1, 4):
             year = investment_year - year_offset
             if year >= 1992:  # 确保年份在专利数据范围内
+                # urban_rate = _get_urban_rate(urban_df, province, year)
+                # fixed_invest = get_fixed_invest(investment_df, province, year)
                 if data_type == 'patent':
                     patent_count = row[f'前3年专利数_前{year_offset}年']
                     gdp_value = row[f'前3年GDP_前{year_offset}年']
                     ln_gdp = row[f'ln_前3年GDP_前{year_offset}年']
-                    province = convert_province(province)
-                    if str(year) not in urban_df.columns:
-                        print('year not in urban_df.columns')
-                    urban_rate = urban_df.loc[province, str(year)]
-
+                    
                     panel_data.append({
                         'company': company,
                         'year': year,
@@ -66,7 +65,8 @@ def prepare_panel_data(data_type, df):
                         'time_to_investment': year_offset,
                         'period': 'pre',
                         '投资阶段':row['投资阶段'],
-                        '城镇化率':urban_rate
+                        # '城镇化率':urban_rate,
+                        # 'ln_固定资产投资':np.log(fixed_invest)
                     })
                 else:
                     citations = row[f'前3年被引证数_前{year_offset}年']
@@ -87,13 +87,16 @@ def prepare_panel_data(data_type, df):
                         'time_to_investment': year_offset,
                         'period': 'pre',
                         '投资阶段':row['投资阶段'],
-                        '城镇化率':urban_rate
+                        # '城镇化率':urban_rate,
+                        # 'ln_固定资产投资':np.log(fixed_invest)
                     })
         
         # 后3年数据 (post=1)
         for year_offset in range(1, 4):
             year = investment_year + year_offset
             if year <= 2025:  # 确保年份在专利数据范围内
+                # urban_rate = _get_urban_rate(urban_df, province, year)
+                # fixed_invest = get_fixed_invest(investment_df, province, year)
                 if data_type == 'patent':
                     patent_count = row[f'后3年专利数_后{year_offset}年']
                     gdp_value = row[f'后3年GDP_后{year_offset}年']
@@ -113,7 +116,8 @@ def prepare_panel_data(data_type, df):
                         'time_to_investment': -year_offset,
                         'period': 'post',
                         '投资阶段':row['投资阶段'],
-                        '城镇化率':urban_rate
+                        # '城镇化率':urban_rate,
+                        # 'ln_固定资产投资':np.log(fixed_invest)
                     })
                 else:
                     citations = row[f'后3年被引证数_后{year_offset}年']
@@ -134,7 +138,8 @@ def prepare_panel_data(data_type, df):
                         'time_to_investment': -year_offset,
                         'period': 'post',
                         '投资阶段':row['投资阶段'],
-                        '城镇化率':urban_rate
+                        # '城镇化率':urban_rate,
+                        # 'ln_固定资产投资':np.log(fixed_invest)
                     })
     
     # 创建面板数据框
@@ -156,11 +161,23 @@ def prepare_panel_data(data_type, df):
         group_stats = panel_df.groupby(['treatment', 'post'])['ln_citations_plus_1'].agg(['count', 'mean', 'std']).round(4)
     print(f"\n5. 分组统计:")
     print(group_stats)
+
+    write_panel_data(data_type, panel_df)
     
     return panel_df
 
+def _get_urban_rate(df, province, year):
+    try:
+        if year == 2024:
+            year = 2023
+        urban_rate = df.loc[province, str(year)]
+        return urban_rate
+    except Exception as e:
+        print(f"  错误: 处理{province}{year}数据时发生异常: {e}")
+    
 
-def _generate_dummy_variables(panel_df, enable_dummies=True):
+
+def _generate_dummy_variables(data_type,panel_df):
     """
     生成虚拟变量
     
@@ -174,30 +191,23 @@ def _generate_dummy_variables(panel_df, enable_dummies=True):
     """
     print("6. 生成虚拟变量...")
     
-    # 设置面板数据索引
-    panel_df = panel_df.set_index(['company', 'year'])
     
     # 添加交互项
     panel_df['treatment_post'] = panel_df['treatment'] * panel_df['post']
     
-    # 创建省份虚拟变量（如果启用）
-    if enable_dummies:
-        print("   - 创建虚拟变量...")
-        
-        # 使用pd.get_dummies创建省份虚拟变量
-        panel_dummies = pd.get_dummies(panel_df, columns=['省份','投资阶段'], prefix=['省','投资阶段'], drop_first=True)
+    
+    print("   - 创建虚拟变量...")
+    
+    # 使用pd.get_dummies创建省份虚拟变量
+    panel_dummies = pd.get_dummies(panel_df, columns=['省份','投资阶段'], prefix=['省','投资阶段'], drop_first=True, dtype=int)
 
-    else:
-        print("   -虚拟变量已禁用")
-
-    dummy_cols = []
-    for col in panel_dummies.columns:
-        if col.startswith('省') or col.startswith('投资阶段'):
-            dummy_cols.append(col)
-    return panel_dummies,dummy_cols
+    # file = 'patent_analysis/did_panel_data_patents.xlsx' if data_type == 'patent' else 'patent_analysis/did_panel_data_citations.xlsx'
+    # with pd.ExcelWriter(file, engine='openpyxl') as writer:
+    #     panel_dummies.to_excel(writer, sheet_name='面板数据')
+    return panel_dummies
 
 
-def _perform_regression(data_type, panel_df, dummy_cols, enable_dummies=True):
+def _perform_regression(data_type, province_dummy, stage_dummy):
     """
     执行DID回归分析
     
@@ -211,262 +221,255 @@ def _perform_regression(data_type, panel_df, dummy_cols, enable_dummies=True):
     significant_province_dummies: 显著的省份虚拟变量列表
     """
     print("7. 执行带年份虚拟变量的DID回归...")
+    panel_df = read_panel_data(data_type)
+    panel_df.set_index(['company', 'year'], inplace=True)
     
-    try:
-        from linearmodels import PanelOLS
+    from linearmodels import PanelOLS
+    
+    # 准备回归变量
+    control_vars = ['treatment','treatment_post', 'ln_gdp']
+    
+    province_cols = []
+    if province_dummy:
+        for col in panel_df.columns:
+            if col.startswith('省'):
+                control_vars.append(col)
+                province_cols.append(col)
+    stage_cols = []
+    if stage_dummy:
+        for col in panel_df.columns:
+            if col.startswith('投资阶段'):
+                control_vars.append(col)
+                stage_cols.append(col)
+    
+    
+    X = panel_df[control_vars]
+    if data_type == 'patent':
+        y = panel_df['ln_patents_plus_1']
+    else:
+        y = panel_df['ln_citations_plus_1']
+    stas_x = X.describe()
+    stas_y =y.describe()
+    path = 'patent_analysis/'
+    output_file = path + 'did_results'+ '_' + data_type + '.xlsx'
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        stas_x.to_excel(writer, sheet_name='回归变量描述性统计')
+        stas_y.to_excel(writer, sheet_name='被解释变量描述性统计')
+
+    print(f"   - 回归变量数量: {len(control_vars)}")
+    control_desc = ""
+    if province_dummy:
+        control_desc += " + " + " + ".join(province_cols)
+    if stage_dummy:
+        control_desc += " + " + " + ".join(stage_cols)
+    if province_dummy:
+        control_desc = f"{len(province_cols)} 个省份虚拟变量 + " + control_desc
+    if stage_dummy: 
+        control_desc += " + " + " + ".join(stage_cols)
+    print(f"   - 控制变量: {control_desc}")
+    
+    # 执行PanelOLS回归
+    model = PanelOLS(y, X, entity_effects=False, time_effects=True)
+    results = model.fit(cov_type='clustered', cluster_entity=True)
+    
+    print("   - 回归完成")
+    print(f"   - 样本数: {len(panel_df):,}")
+    print(f"   - 公司数: {panel_df.index.get_level_values('company').nunique():,}")
+    
+    # 显示回归结果
+    print("\n8. 回归结果:")
+    print("=" * 80)
+    print(results)
+    print("=" * 80)
+    
+    # 关键系数解释
+    print("\n9. 关键系数解释:")
+    if 'treatment' in results.params.index:
+        print(f"   - Treatment效应 (β1): {results.params['treatment']:.4f}")
+    if 'post' in results.params.index:
+        print(f"   - Post效应 (β2): {results.params['post']:.4f}")
+    print(f"   - DID效应 (β3): {results.params['treatment_post']:.4f}")
+    print(f"   - GDP控制变量 (β4): {results.params['ln_gdp']:.4f}")
+    print(f"   - DID效应t值: {results.tstats['treatment_post']:.4f}")
+    print(f"   - DID效应p值: {results.pvalues['treatment_post']:.4f}")
+    
+    # 显示省份虚拟变量的显著性（如果启用）
+    significant_province_dummies = []
+    if province_dummy:
+        print(f"\n10. 省份虚拟变量显著性:")
+        for col in province_cols:
+            if col in results.params.index:
+                p_value = results.pvalues[col]
+                if p_value < 0.05:
+                    significant_province_dummies.append((col, results.params[col], p_value))
         
-        # 准备回归变量
-        control_vars = ['treatment','treatment_post', 'ln_gdp','城镇化率']
-        
-        if enable_dummies:
-            control_vars += dummy_cols
-        
-        X = panel_df[control_vars]
-        if data_type == 'patent':
-            y = panel_df['ln_patents_plus_1']
+        if significant_province_dummies:
+            print(f"   - 显著的省份虚拟变量 (p<0.05): {len(significant_province_dummies)} 个")
+            print(f"   - 显示前10个显著的省份虚拟变量:")
+            for dummy, coef, p_val in significant_province_dummies[:10]:
+                province_name = dummy.replace('省', '')
+                print(f"     {province_name}: 系数={coef:.4f}, p值={p_val:.4f}")
         else:
-            y = panel_df['ln_citations_plus_1']
+            print("   - 没有显著的省份虚拟变量")
+    else:
+        print(f"\n10. 省份虚拟变量显著性: 已禁用")
+    
+    # 计算边际效应
+    print(f"\n11. 边际效应分析:")
+    # 控制组在投资前后的变化
+    ycol = 'ln_patents_plus_1' if data_type == 'patent' else 'ln_citations_plus_1'  
+    control_pre = panel_df[(panel_df['treatment'] == 0) & (panel_df['post'] == 0)][ycol].mean()
+    control_post = panel_df[(panel_df['treatment'] == 0) & (panel_df['post'] == 1)][ycol].mean()
+    control_change = control_post - control_pre
+    
+    # 处理组在投资前后的变化
+    treatment_pre = panel_df[(panel_df['treatment'] == 1) & (panel_df['post'] == 0)][ycol].mean()
+    treatment_post = panel_df[(panel_df['treatment'] == 1) & (panel_df['post'] == 1)][ycol].mean()
+    treatment_change = treatment_post - treatment_pre
+    
+    print(f"   - 控制组投资前平均ln(专利+1): {control_pre:.4f}")
+    print(f"   - 控制组投资后平均ln(专利+1): {control_post:.4f}")
+    print(f"   - 控制组变化: {control_change:.4f}")
+    print(f"   - 处理组投资前平均ln(专利+1): {treatment_pre:.4f}")
+    print(f"   - 处理组投资后平均ln(专利+1): {treatment_post:.4f}")
+    print(f"   - 处理组变化: {treatment_change:.4f}")
+    
+    if results is None:
+        return None
         
-        print(f"   - 回归变量数量: {len(control_vars)}")
-        control_desc = "GDP"
+    # 6. 保存面板数据和回归结果到输出文件
+    print(f"6. 保存面板数据和回归结果到: {output_file}")
+    with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+        # 保存面板数据
+        panel_df.to_excel(writer, sheet_name='面板数据', index=False)
+        print(f"   - 面板数据已保存到'面板数据'工作表")
         
-        if enable_dummies:
-            control_desc = f"{len(dummy_cols)} 个省份虚拟变量 + " + control_desc
-        print(f"   - 控制变量: {control_desc}")
+        # 保存回归结果摘要
+        results_summary = pd.DataFrame({
+            '变量': results.params.index,
+            '系数': results.params.values,
+            '标准误': results.std_errors.values,
+            't值': results.tstats.values,
+            'p值': results.pvalues.values,
+            '置信区间下限': results.conf_int().iloc[:, 0].values,
+            '置信区间上限': results.conf_int().iloc[:, 1].values
+        })
+        results_summary.to_excel(writer, sheet_name='回归结果', index=False)
+        print(f"   - 回归结果已保存到'回归结果'工作表")
         
-        # 执行PanelOLS回归
-        model = PanelOLS(y, X, entity_effects=False, time_effects=True)
-        results = model.fit(cov_type='clustered', cluster_entity=True)
+        # 保存回归统计信息
+        stats_data = {
+            '统计指标': [
+                'R方', 'F统计量', 'F统计量p值', 
+                '观测值数量', '残差自由度', '模型自由度'
+            ],
+        }
         
-        print("   - 回归完成")
-        print(f"   - 样本数: {len(panel_df):,}")
-        print(f"   - 公司数: {panel_df.index.get_level_values('company').nunique():,}")
+        # 尝试获取R方等统计量，逐个处理以避免单个字段不可用导致全部失败
+        stats_values = []
         
-        # 显示回归结果
-        print("\n8. 回归结果:")
-        print("=" * 80)
-        print(results)
-        print("=" * 80)
+        # R方
+        try:
+            stats_values.append(results.rsquared)
+        except AttributeError:
+            stats_values.append(np.nan)
         
-        # 关键系数解释
-        print("\n9. 关键系数解释:")
-        if 'treatment' in results.params.index:
-            print(f"   - Treatment效应 (β1): {results.params['treatment']:.4f}")
-        if 'post' in results.params.index:
-            print(f"   - Post效应 (β2): {results.params['post']:.4f}")
-        print(f"   - DID效应 (β3): {results.params['treatment_post']:.4f}")
-        print(f"   - GDP控制变量 (β4): {results.params['ln_gdp']:.4f}")
-        print(f"   - DID效应t值: {results.tstats['treatment_post']:.4f}")
-        print(f"   - DID效应p值: {results.pvalues['treatment_post']:.4f}")
+        # F统计量
+        try:
+            stats_values.append(results.f_statistic.stat)
+        except AttributeError:
+            stats_values.append(np.nan)
         
-        # 显示省份虚拟变量的显著性（如果启用）
-        significant_province_dummies = []
-        if enable_dummies:
-            print(f"\n10. 省份虚拟变量显著性:")
-            for col in dummy_cols:
-                if col in results.params.index:
-                    p_value = results.pvalues[col]
-                    if p_value < 0.05:
-                        significant_province_dummies.append((col, results.params[col], p_value))
-            
-            if significant_province_dummies:
-                print(f"   - 显著的省份虚拟变量 (p<0.05): {len(significant_province_dummies)} 个")
-                print(f"   - 显示前10个显著的省份虚拟变量:")
-                for dummy, coef, p_val in significant_province_dummies[:10]:
-                    province_name = dummy.replace('province_', '')
-                    print(f"     {province_name}: 系数={coef:.4f}, p值={p_val:.4f}")
-            else:
-                print("   - 没有显著的省份虚拟变量")
-        else:
-            print(f"\n10. 省份虚拟变量显著性: 已禁用")
+        # F统计量p值
+        try:
+            stats_values.append(results.f_statistic.pval)
+        except AttributeError:
+            stats_values.append(np.nan)
         
-        # 计算边际效应
-        print(f"\n11. 边际效应分析:")
-        # 控制组在投资前后的变化
-        ycol = 'ln_patents_plus_1' if data_type == 'patent' else 'ln_citations_plus_1'  
-        control_pre = panel_df[(panel_df['treatment'] == 0) & (panel_df['post'] == 0)][ycol].mean()
-        control_post = panel_df[(panel_df['treatment'] == 0) & (panel_df['post'] == 1)][ycol].mean()
-        control_change = control_post - control_pre
+        # 观测值数量
+        try:
+            stats_values.append(results.nobs)
+        except AttributeError:
+            stats_values.append(np.nan)
         
-        # 处理组在投资前后的变化
-        treatment_pre = panel_df[(panel_df['treatment'] == 1) & (panel_df['post'] == 0)][ycol].mean()
-        treatment_post = panel_df[(panel_df['treatment'] == 1) & (panel_df['post'] == 1)][ycol].mean()
-        treatment_change = treatment_post - treatment_pre
+        # 残差自由度
+        try:
+            stats_values.append(results.df_resid)
+        except AttributeError:
+            stats_values.append(np.nan)
         
-        print(f"   - 控制组投资前平均ln(专利+1): {control_pre:.4f}")
-        print(f"   - 控制组投资后平均ln(专利+1): {control_post:.4f}")
-        print(f"   - 控制组变化: {control_change:.4f}")
-        print(f"   - 处理组投资前平均ln(专利+1): {treatment_pre:.4f}")
-        print(f"   - 处理组投资后平均ln(专利+1): {treatment_post:.4f}")
-        print(f"   - 处理组变化: {treatment_change:.4f}")
+        # 模型自由度
+        try:
+            stats_values.append(results.df_model)
+        except AttributeError:
+            stats_values.append(np.nan)
         
+        stats_data['数值'] = stats_values
         
-        return results, significant_province_dummies
+        stats_df = pd.DataFrame(stats_data)
+        stats_df.to_excel(writer, sheet_name='回归统计', index=False)
+        print(f"   - 回归统计已保存到'回归统计'工作表")
         
-    except ImportError as e:
-        print(e)
-        print("   错误: 需要安装linearmodels库")
-        return None, []
+        # 保存DID效应摘要
+        did_summary = pd.DataFrame({
+            '效应类型': ['DID效应', 'GDP控制变量效应'],
+            '系数': [results.params['treatment_post'], results.params['ln_gdp']],
+            't值': [results.tstats['treatment_post'], results.tstats['ln_gdp']],
+            'p值': [results.pvalues['treatment_post'], results.pvalues['ln_gdp']],
+            '显著性': [
+                '显著' if results.pvalues['treatment_post'] < 0.05 else '不显著',
+                '显著' if results.pvalues['ln_gdp'] < 0.05 else '不显著'
+            ]
+        })
+        did_summary.to_excel(writer, sheet_name='DID效应摘要', index=False)
+        print(f"   - DID效应摘要已保存到'DID效应摘要'工作表")
+        
+        # 保存省份虚拟变量信息
+        if province_dummy:
+            province_info = pd.DataFrame({
+                '省份虚拟变量': province_cols       ,
+                '系数': [results.params.get(col, np.nan) for col in province_cols],
+                't值': [results.tstats.get(col, np.nan) for col in province_cols],
+                'p值': [results.pvalues.get(col, np.nan) for col in province_cols],
+                '显著性': ['显著' if results.pvalues.get(col, 1) < 0.05 else '不显著' for col in province_cols]
+            })
+            province_info.to_excel(writer, sheet_name='省份虚拟变量', index=False)
+            print(f"   - 省份虚拟变量信息已保存到'省份虚拟变量'工作表")
+    
+    print(f"✅ 所有数据已成功保存到: {output_file}")
+    
+    return {
+        'panel_df': panel_df,
+        'regression_results': results,
+        'did_effect': results.params['treatment_post'],
+        'did_t_value': results.tstats['treatment_post'],
+        'did_p_value': results.pvalues['treatment_post'],
+        'gdp_effect': results.params['ln_gdp'],
+        'province_dummy_count': len(province_cols) if province_dummy else 0,
+        'significant_province_dummies': len(significant_province_dummies),
+        'panel_file': output_file
+    }
 
 
-def perform_did_regression(data_type, input_file, output_file=None, enable_dummies=True, use_time_effects=True):
-    """
-    根据patent_investment_timeline_with_province_gdp数据做DID回归
-    被解释变量是公司某年的ln(专利数+1)
-    treatment是是否接受政府引导基金投资
-    post变量在投资后3年取1，投资前3年取0
-    控制变量包括公司所在省份当年ln(GDP+1)和年份虚拟变量
-    
-    参数:
-    input_file: 输入的带GDP数据的文件路径，默认'regress_data_with_gdp.xlsx'
-    output_file: 输出文件路径，如果为None则自动生成
-    enable_province_dummies: 是否启用省份虚拟变量，默认True
-    use_time_effects: 是否启用年份虚拟变量，默认True
-    """
+
+def perform_did_regression(data_type):
+
     try:
         print("=== 执行带年份虚拟变量的DID回归分析 ===")
-        
-        # 1. 读取带GDP数据的timeline数据
-        print(f"1. 读取带GDP数据的timeline数据: {input_file}...")
-        df = pd.read_excel(input_file, sheet_name='回归数据')
-        print(f"   - 数据行数: {len(df):,}")
+
         
         # 2. 准备面板数据
-        panel_df = prepare_panel_data(data_type, df)
+        # panel_df = prepare_panel_data(data_type)
         
-        # 3. 生成虚拟变量
-        panel_df, dummy_cols = _generate_dummy_variables(panel_df, enable_dummies)
+        # # 3. 生成虚拟变量
+        # df = _generate_dummy_variables(data_type, panel_df)
         
+        # write_panel_data(data_type, df)
         # 4. 执行回归分析
-        results, significant_province_dummies = _perform_regression(data_type, panel_df, dummy_cols, enable_dummies)
         
-        if results is None:
-            return None
+        _perform_regression(data_type, province_dummy=True, stage_dummy=False)
         
-        # 5. 生成输出文件名
-        if output_file is None:
-            # 根据输入文件名自动生成输出文件名
-            if 'patent' in input_file.lower():
-                output_filename = 'did_panel_data_patents_with_year_dummies.xlsx'
-            elif 'citation' in input_file.lower():
-                output_filename = 'did_panel_data_citations_with_year_dummies.xlsx'
-            else:
-                output_filename = 'did_panel_data_with_year_dummies.xlsx'
-        else:
-            output_filename = output_file
         
-        # 6. 保存面板数据和回归结果到输出文件
-        print(f"6. 保存面板数据和回归结果到: {output_filename}")
-        with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
-            # 保存面板数据
-            panel_df.to_excel(writer, sheet_name='面板数据', index=False)
-            print(f"   - 面板数据已保存到'面板数据'工作表")
-            
-            # 保存回归结果摘要
-            results_summary = pd.DataFrame({
-                '变量': results.params.index,
-                '系数': results.params.values,
-                '标准误': results.std_errors.values,
-                't值': results.tstats.values,
-                'p值': results.pvalues.values,
-                '置信区间下限': results.conf_int().iloc[:, 0].values,
-                '置信区间上限': results.conf_int().iloc[:, 1].values
-            })
-            results_summary.to_excel(writer, sheet_name='回归结果', index=False)
-            print(f"   - 回归结果已保存到'回归结果'工作表")
-            
-            # 保存回归统计信息
-            stats_data = {
-                '统计指标': [
-                    'R方', 'F统计量', 'F统计量p值', 
-                    '观测值数量', '残差自由度', '模型自由度'
-                ],
-            }
-            
-            # 尝试获取R方等统计量，逐个处理以避免单个字段不可用导致全部失败
-            stats_values = []
-            
-            # R方
-            try:
-                stats_values.append(results.rsquared)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            # F统计量
-            try:
-                stats_values.append(results.f_statistic.stat)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            # F统计量p值
-            try:
-                stats_values.append(results.f_statistic.pval)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            # 观测值数量
-            try:
-                stats_values.append(results.nobs)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            # 残差自由度
-            try:
-                stats_values.append(results.df_resid)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            # 模型自由度
-            try:
-                stats_values.append(results.df_model)
-            except AttributeError:
-                stats_values.append(np.nan)
-            
-            stats_data['数值'] = stats_values
-            
-            stats_df = pd.DataFrame(stats_data)
-            stats_df.to_excel(writer, sheet_name='回归统计', index=False)
-            print(f"   - 回归统计已保存到'回归统计'工作表")
-            
-            # 保存DID效应摘要
-            did_summary = pd.DataFrame({
-                '效应类型': ['DID效应', 'GDP控制变量效应'],
-                '系数': [results.params['treatment_post'], results.params['ln_gdp']],
-                't值': [results.tstats['treatment_post'], results.tstats['ln_gdp']],
-                'p值': [results.pvalues['treatment_post'], results.pvalues['ln_gdp']],
-                '显著性': [
-                    '显著' if results.pvalues['treatment_post'] < 0.05 else '不显著',
-                    '显著' if results.pvalues['ln_gdp'] < 0.05 else '不显著'
-                ]
-            })
-            did_summary.to_excel(writer, sheet_name='DID效应摘要', index=False)
-            print(f"   - DID效应摘要已保存到'DID效应摘要'工作表")
-            
-            # 保存省份虚拟变量信息
-            if enable_dummies and dummy_cols:
-                province_info = pd.DataFrame({
-                    '省份虚拟变量': dummy_cols,
-                    '系数': [results.params.get(col, np.nan) for col in dummy_cols],
-                    't值': [results.tstats.get(col, np.nan) for col in dummy_cols],
-                    'p值': [results.pvalues.get(col, np.nan) for col in dummy_cols],
-                    '显著性': ['显著' if results.pvalues.get(col, 1) < 0.05 else '不显著' for col in dummy_cols]
-                })
-                province_info.to_excel(writer, sheet_name='省份虚拟变量', index=False)
-                print(f"   - 省份虚拟变量信息已保存到'省份虚拟变量'工作表")
-        
-        print(f"✅ 所有数据已成功保存到: {output_filename}")
-        
-        return {
-            'panel_df': panel_df,
-            'regression_results': results,
-            'did_effect': results.params['treatment_post'],
-            'did_t_value': results.tstats['treatment_post'],
-            'did_p_value': results.pvalues['treatment_post'],
-            'gdp_effect': results.params['ln_gdp'],
-            'province_dummy_count': len(dummy_cols) if enable_dummies else 0,
-            'significant_province_dummies': len(significant_province_dummies),
-            'panel_file': output_filename
-        }
         
     except Exception as e:
         print(f"执行带年份虚拟变量的DID回归时出现错误: {e}")
@@ -474,32 +477,30 @@ def perform_did_regression(data_type, input_file, output_file=None, enable_dummi
         traceback.print_exc()
         return None
 
+def get_fixed_invest(df, province,year):
+    if year == 2024:
+        year = 2023
+    for idx, row in df.iterrows():
+        if row['地区'] == province and row['年份'] == year:
+            return row['合计/亿元']
+    return 0
+
+def read_panel_data(data_type)->pd.DataFrame:
+    if data_type == 'patent':
+        return pd.read_excel('patent_analysis/did_panel_data_patents.xlsx', sheet_name='面板数据')
+    elif data_type == 'citation':
+        return pd.read_excel('patent_analysis/did_panel_data_patents.xlsx', sheet_name='面板数据')
+
+def write_panel_data(data_type, panel_df):
+    if data_type == 'patent':
+        panel_df.to_excel('patent_analysis/did_panel_data_patents.xlsx', sheet_name='面板数据', index=False)
+    elif data_type == 'citation':
+        panel_df.to_excel('patent_analysis/did_panel_data_patents.xlsx', sheet_name='面板数据', index=False)
+
 if __name__ == "__main__":
     # 执行带年份虚拟变量的DID回归分析
     # 可以通过参数控制是否启用省份虚拟变量和时间虚拟变量
     result = perform_did_regression(
         data_type='patent',
-        input_file='patent_analysis/regress_data_patents.xlsx',
-        output_file='patent_analysis/did_panel_data_patents.xlsx',
-        enable_dummies=True,  # 启用省份虚拟变量
-        use_time_effects=True       # 启用年份虚拟变量
-    )
     
-    if result:
-        print(f"\n=== 带年份虚拟变量的DID回归分析完成 ===")
-        print(f"DID效应系数: {result['did_effect']:.4f}")
-        print(f"t值: {result['did_t_value']:.4f}")
-        print(f"p值: {result['did_p_value']:.4f}")
-        print(f"GDP控制变量系数: {result['gdp_effect']:.4f}")
-        print(f"省份虚拟变量数量: {result['province_dummy_count']}")
-        print(f"显著的省份虚拟变量: {result['significant_province_dummies']}")
-        
-        if result['did_p_value'] < 0.05:
-            print("✅ DID效应在5%水平上显著")
-        elif result['did_p_value'] < 0.1:
-            print("⚠️ DID效应在10%水平上显著")
-        else:
-            print("❌ DID效应不显著")
-
-    else:
-        print("回归分析失败")
+    )

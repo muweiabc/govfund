@@ -53,10 +53,6 @@ def read_fixed_invest():
         if not os.path.exists(file_path):
             print(f"✗ 错误: 固定资产投资文件不存在 - {file_path}")
             return None
-        
-        # 尝试读取Excel文件
-        xl_file = pd.ExcelFile(file_path)
-        print(f"✓ 成功读取固定资产投资文件")
    
         sheet_name = '总数据'
         print(f"  使用Sheet: {sheet_name}")
@@ -348,10 +344,10 @@ def regress():
                     # 获取投资笔数（替代基金数量）
                     investment_count = get_investment_count(province, year, investment_detail_df)
                     
-                    pos = convert_province(province)
+                    
                     if str(year) not in urban_df.columns:
                         print('year not in urban_df.columns')
-                    urban_rate = urban_df.loc[pos, str(year)]
+                    urban_rate = urban_df.loc[province, str(year)]
                     
                     # 获取固定资产投资数据
                     investment_value = get_investment(province, year, investment_df, investment_col)
@@ -507,13 +503,6 @@ def regress():
         print(f"错误类型: {type(e).__name__}")
         print("详细错误信息:")
         traceback.print_exc()
-
-def convert_province(province):
-    """转换省份名称格式"""
-    if province.endswith('市') or province.endswith('省'):
-        return province[:-1]
-    else:
-        return province
 
 def get_investment(province, year, investment_df, investment_col):
     """根据省份和年份获取固定资产投资数据"""
