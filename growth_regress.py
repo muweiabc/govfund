@@ -57,7 +57,7 @@ def read_fixed_invest():
         sheet_name = '总数据'
         print(f"  使用Sheet: {sheet_name}")
         
-        df = pd.read_excel(file_path, sheet_name=sheet_name)
+        df = pd.read_excel(file_path, sheet_name=sheet_name,index_col=[1,2])
         print(f"  数据形状: {df.shape}")
         print(f"  列名: {list(df.columns)}")
     
