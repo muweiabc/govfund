@@ -168,9 +168,10 @@ def _generate_dummy_variables(data_type,panel_df):
     
     
     
-    
+    province_cols = panel_df['省份']
     # 使用pd.get_dummies创建省份虚拟变量
     panel_dummies = pd.get_dummies(panel_df, columns=['省份','投资阶段'], prefix=['省','投资阶段'], drop_first=True, dtype=int)
+    panel_dummies['原省份'] = province_cols
     print("   - 创建虚拟变量完成 ")
     return panel_dummies
 
@@ -181,12 +182,10 @@ def _perform_regression(data_type, province_dummy, stage_dummy):
     
     参数:
     panel_df: 面板数据DataFrame
-    dummy_cols: 省份虚拟变量列名列表
     enable_province_dummies: 是否启用省份虚拟变量
     
     返回:
     results: 回归结果
-    significant_province_dummies: 显著的省份虚拟变量列表
     """
     print("执行DID回归...")
     panel_df = read_panel_data(data_type)
@@ -195,7 +194,7 @@ def _perform_regression(data_type, province_dummy, stage_dummy):
     from linearmodels import PanelOLS
     
     # 准备回归变量
-    control_vars = ['treatment','treatment_post', 'ln_gdp','城镇化率','ln_固定资产投资']
+    control_vars = ['treatment','treatment_post', 'gdp','城镇化率','ln_固定资产投资','二产比例','二产就业比例']
     
     province_cols = []
     if province_dummy:
@@ -350,20 +349,6 @@ def _perform_regression(data_type, province_dummy, stage_dummy):
         stats_df.to_excel(writer, sheet_name='回归统计', index=False)
         print(f"   - 回归统计已保存到'回归统计'工作表")
         
-        # 保存DID效应摘要
-        did_summary = pd.DataFrame({
-            '效应类型': ['DID效应', 'GDP控制变量效应'],
-            '系数': [results.params['treatment_post'], results.params['ln_gdp']],
-            't值': [results.tstats['treatment_post'], results.tstats['ln_gdp']],
-            'p值': [results.pvalues['treatment_post'], results.pvalues['ln_gdp']],
-            '显著性': [
-                '显著' if results.pvalues['treatment_post'] < 0.05 else '不显著',
-                '显著' if results.pvalues['ln_gdp'] < 0.05 else '不显著'
-            ]
-        })
-        did_summary.to_excel(writer, sheet_name='DID效应摘要', index=False)
-        print(f"   - DID效应摘要已保存到'DID效应摘要'工作表")
-        
         # 保存省份虚拟变量信息
         if province_dummy:
             province_info = pd.DataFrame({
@@ -384,10 +369,6 @@ def _perform_regression(data_type, province_dummy, stage_dummy):
         'did_effect': results.params['treatment_post'],
         'did_t_value': results.tstats['treatment_post'],
         'did_p_value': results.pvalues['treatment_post'],
-        'gdp_effect': results.params['ln_gdp'],
-        'province_dummy_count': len(province_cols) if province_dummy else 0,
-        'significant_province_dummies': len(significant_province_dummies),
-        'panel_file': output_file
     }
 
 def add_urban_col(df):
@@ -395,7 +376,7 @@ def add_urban_col(df):
     urban_df = read_urban() 
     urban_rates =[]
     for idx, row in df.iterrows():
-        province ,year= row['省份'],row['year']
+        province ,year = row['省份'],row['year']
         try:
             if year == 2024:
                 year = 2023
@@ -420,6 +401,28 @@ def add_fixed_invest_col(df):
     df['ln_固定资产投资'] = np.log(df['固定资产投资'] + 1)
     return df
 
+def add_industry_col(df):
+    # 第二产业产值占比
+    gdp_df = pd.read_excel('gdp.xlsx', sheet_name='sheet1',index_col=[0,1])
+    industry_values =[]
+    for idx, row in df.iterrows():
+        province ,year= row['省份'],row['year']
+        industry_values.append(gdp_df.loc[year,province]['第二产业占GDP的比重(%)'])
+    df['二产比例'] = pd.Series(industry_values)
+    return df
+
+def add_employment_col(df):
+    # 第二产业从业人口占比
+    employment_df = pd.read_excel('就业人口.xlsx',index_col=[1,2]) #年份，省份
+    employment_values =[]
+    for idx, row in df.iterrows():
+        province ,year= row['省份'],row['year']
+        if year == 2024:
+            year = 2023
+        employment_values.append(employment_df.loc[year,province]['第二产业就业人员比例(%)'])
+    df['二产就业比例'] = pd.Series(employment_values)
+    return df
+
 def perform_did_regression(data_type):
 
     try:
@@ -427,13 +430,18 @@ def perform_did_regression(data_type):
 
         if choice == '1': 
             # 2. 准备面板数据
+            # panel_df = read_panel_data(data_type)
             panel_df = prepare_panel_data(data_type)
             
-            df = add_urban_col(panel_df)
-            df = add_fixed_invest_col(df)
-            df = _generate_dummy_variables(data_type, panel_df)
+            panel_df = add_urban_col(panel_df)
+            panel_df = add_fixed_invest_col(panel_df)
+
             
-            write_panel_data(data_type, df)
+            panel_df = add_industry_col(panel_df)
+            panel_df = add_employment_col(panel_df)
+            panel_df = _generate_dummy_variables(data_type, panel_df)
+            
+            write_panel_data(data_type, panel_df)
             
         elif choice == '2':
             _perform_regression(data_type, province_dummy=True, stage_dummy=True)

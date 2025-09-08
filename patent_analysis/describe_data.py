@@ -178,16 +178,28 @@ def describe_excel_columns(input_file: str, sheet_name: str = None, columns: Lis
         traceback.print_exc()
         return None
 
-
+def count_patent():
+    path = 'patent_analysis/'
+    df = pd.read_excel(path +'did_panel_data_patents.xlsx',sheet_name='面板数据')
+    results = describe_sequence(df['patent_count'])
+    print(results)
 # 示例用法
+
+def main():
+# 示例1: 对指定列进行描述性统计并保存到原文件
+    # print("=== 示例1: 对指定列进行描述性统计 ===")
+    # stats_result = describe_excel_columns(
+    #     input_file='patent_analysis/did_panel_data_patents_with_year_dummies.xlsx',
+    #     sheet_name='面板数据',
+    #     # columns=['投资当年GDP', '前3年专利数_前1年', '后3年专利数_后1年'],
+    #     output_sheet='GDP和专利统计'
+    # )
+    choice = input("\n请输入选择 (1 count_patent()\n ").strip()
+    if choice == '1':
+        count_patent()
+
 if __name__ == "__main__":
-    # 示例1: 对指定列进行描述性统计并保存到原文件
-    print("=== 示例1: 对指定列进行描述性统计 ===")
-    stats_result = describe_excel_columns(
-        input_file='patent_analysis/did_panel_data_patents_with_year_dummies.xlsx',
-        sheet_name='面板数据',
-        # columns=['投资当年GDP', '前3年专利数_前1年', '后3年专利数_后1年'],
-        output_sheet='GDP和专利统计'
-    )
+    main()
+    
     
    
