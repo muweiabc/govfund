@@ -5,7 +5,7 @@ import pickle
 import time
 from tqdm import tqdm
 
-def analyze_company_patents(data_type, output_file):
+def analyze_company_patents(output_file, patent_file):
     """
     读取invest中的公司名，在t'ri'm'pa't'e'n't中查找该公司在各年份获得的专利数量
     使用稀疏矩阵存储结果，避免内存浪费
@@ -19,23 +19,21 @@ def analyze_company_patents(data_type, output_file):
     print(f"共读取到 {len(company_names)} 家公司")
     
     # 2. 读取专利数据（分块读取以节省内存）
-    print("正在读取trimpatent_all.csv...")
+    print(f"正在读取{patent_file}...")
     
     # 获取文件大小以估算行数
     import os
-    file = 'data/trimpatent_all.csv'
-    file_size = os.path.getsize(file)
+    file_size = os.path.getsize(patent_file)
     print(f"文件大小: {file_size / (1024**3):.2f} GB")
     
     # 分块读取专利数据
-    chunk_size = 100000  # 每次读取10万行
+    chunk_size = 1000000  # 每次读取100万行
     patents_chunks = []
     
-    for chunk in tqdm(pd.read_csv(file, chunksize=chunk_size), 
+    for chunk in tqdm(pd.read_csv(patent_file, chunksize=chunk_size), 
                       desc="读取专利数据"):
         # 只保留需要的列
-        chunk = chunk[['申请人', '申请年份','被引证次数']].copy()
-        patents_chunks.append(chunk)
+        patents_chunks.append(chunk.copy())
     
     patents_df = pd.concat(patents_chunks, ignore_index=True)
     print(f"专利数据总行数: {len(patents_df)}")
@@ -58,25 +56,39 @@ def analyze_company_patents(data_type, output_file):
     
     # 5. 初始化稀疏矩阵
     print("正在创建稀疏矩阵...")
-    rows, cols, data = [], [], []
+    
     
     # 6. 统计每个公司在每年的专利数量
     print("正在统计专利数量...")
     start_time = time.time()
     
+    APPLICANT = '申请人'
+    YEAR = '申请年份'
+    PATENT_COUNT = '专利数量'
+    CITATION_COUNT = '被引证次数'
+    INVENTING_COUNT = '发明数量'
+    INVENTING_CITATION = '发明被引证次数'
+
     # 按公司分组统计
-    patents_df['被引证次数'] = patents_df['被引证次数'].astype(int)
-    if data_type == 'patents':
-        company_patents = patents_df.groupby(['申请人', '申请年份']).size().reset_index(name='专利数量')
-    else:
-        company_patents = patents_df.groupby(['申请人', '申请年份'])['被引证次数'].agg('sum').reset_index(name='被引证次数')
+    # patents_df['被引证次数'] = patents_df['被引证次数'].fillna(0)
+    patents_df['被引证次数'] = pd.to_numeric(patents_df['被引证次数'], errors='coerce').fillna(0).astype(float)
+    # patents_df['被引证次数'] = patents_df['被引证次数'].astype(int)
     
-    print("正在构建稀疏矩阵数据...")
+    company_patents = patents_df.groupby([APPLICANT, YEAR])['被引证次数'].agg(["count",'sum'])
+    company_patents = company_patents.rename(columns={'count':PATENT_COUNT,'sum':CITATION_COUNT}).reset_index()  # 每组数量
+    
+    years_str = ['y' + str(year) for year in years]
+
+    # 7. 创建稀疏矩阵
+    print("正在构建稀疏矩阵...")
+    rows, cols, data_count, data_citation = [], [], [], []
     for _, row in tqdm(company_patents.iterrows(), total=len(company_patents), desc="处理专利数据"):
-        company = row['申请人']
-        year = row['申请年份']
-        count = row['专利数量'] if data_type == 'patents' else row['被引证次数']
         
+        company = row[APPLICANT]
+        year = row[YEAR]
+        count = row[PATENT_COUNT] 
+        citations = row[CITATION_COUNT]
+
         # 如果公司在我们的列表中
         if company in company_to_idx:
             company_idx = company_to_idx[company]
@@ -84,26 +96,69 @@ def analyze_company_patents(data_type, output_file):
             
             rows.append(company_idx)
             cols.append(year_idx)
-            data.append(count)
+            data_count.append(count)
+            data_citation.append(citations)
+      
     
-    # 7. 创建稀疏矩阵
-    print("正在构建稀疏矩阵...")
-    sparse_matrix = csr_matrix((data, (rows, cols)), 
+    sparse_matrix = csr_matrix((data_count, (rows, cols)), 
                               shape=(len(company_names), len(years)))
-    
-    # 保存为CSV格式（便于查看）
-    print("正在保存...")
-    years_str = ['y' + str(year) for year in years]
-    result_df = pd.DataFrame(
+    count_df = pd.DataFrame(
         sparse_matrix.toarray(),
         index=company_names,
         columns=years_str
     )
-    if data_type == 'patents':
-        sheet_name = '有专利公司'
-    else:
-        sheet_name = '被引证次数'
-    result_df.to_excel(output_file, sheet_name=sheet_name)
+    
+    sparse_matrix = csr_matrix((data_citation, (rows, cols)), 
+                              shape=(len(company_names), len(years)))
+    citation_df = pd.DataFrame(
+            sparse_matrix.toarray(),
+            index=company_names,
+            columns=years_str
+        )
+
+    #  处理发明数据
+
+    company_invention_df = patents_df[(patents_df['专利类型'] == '发明专利') | (patents_df['专利类型'] == '发明申请')]
+    company_inventing = company_invention_df.groupby([APPLICANT, YEAR])['被引证次数'].agg(["count",'sum'])
+    company_inventing = company_inventing.rename(columns={'count':INVENTING_COUNT,'sum':INVENTING_CITATION}).reset_index()
+    
+    rows, cols, invention_count, invention_citation = [], [], [],[]
+    for _, row in tqdm(company_inventing.iterrows(), total=len(company_inventing), desc="处理发明数据"):
+        company = row[APPLICANT]
+        year = row[YEAR]
+        count = row[INVENTING_COUNT] 
+        citations = row[INVENTING_CITATION]
+        # 如果公司在我们的列表中
+        if company in company_to_idx:
+            company_idx = company_to_idx[company]
+            year_idx = year_to_idx[year]
+            
+            rows.append(company_idx)
+            cols.append(year_idx)
+            invention_count.append(count)
+            invention_citation.append(citations)
+
+    sparse_matrix = csr_matrix((invention_count, (rows, cols)), 
+                              shape=(len(company_names), len(years)))
+    company_invention_df = pd.DataFrame(
+            sparse_matrix.toarray(),
+            index=company_names,
+            columns=years_str
+        )
+
+    sparse_matrix = csr_matrix((invention_citation, (rows, cols)), 
+                              shape=(len(company_names), len(years)))
+    invention_citation_df = pd.DataFrame(
+            sparse_matrix.toarray(),
+            index=company_names,
+            columns=years_str
+        )
+
+    with pd.ExcelWriter(output_file) as writer:
+        count_df.to_excel(writer, sheet_name=PATENT_COUNT)
+        citation_df.to_excel(writer, sheet_name=CITATION_COUNT)
+        company_invention_df.to_excel(writer, sheet_name=INVENTING_COUNT)
+        invention_citation_df.to_excel(writer, sheet_name=INVENTING_CITATION)
     
     # 9. 输出统计信息
     print("\n=== 分析结果 ===")
@@ -113,18 +168,7 @@ def analyze_company_patents(data_type, output_file):
     print(f"非零元素数量: {sparse_matrix.nnz}")
     print(f"稀疏度: {(1 - sparse_matrix.nnz / (len(company_names) * len(years))) * 100:.2f}%")
     
-    # 显示一些示例
-    print("\n=== 示例数据 ===")
-    print("前5家公司的专利情况:")
-    for i in range(min(5, len(company_names))):
-        company = company_names[i]
-        patents_by_year = result_df.iloc[i]
-        total_patents = patents_by_year.sum()
-        print(f"{company}: 总计 {total_patents} 件专利")
-        # 显示有专利的年份
-        years_with_patents = patents_by_year[patents_by_year > 0]
-        if len(years_with_patents) > 0:
-            print(f"  有专利的年份: {dict(years_with_patents)}")
+  
     
     print(f"\n分析完成，耗时: {time.time() - start_time:.2f} 秒")
     print("结果已保存到:")
@@ -200,9 +244,19 @@ def query_company_patents(company_name):
 if __name__ == "__main__":
     # 运行分析
     # sparse_matrix, company_names, years = analyze_company_patents()
+    import argparse
+    parser = argparse.ArgumentParser(description='公司专利分析')
     
-    # # 演示查询功能
-    print("\n" + "="*50)
+    # 基本参数
+    
+    parser.add_argument('--output_file', 
+                       default='patent_analysis/company_patent_yearly.xlsx',
+                       help='输出文件路径')
+    parser.add_argument('--patent_file', 
+                       default='data/trimpatent_all.csv',
+                       help='专利数据文件路径')
+    args = parser.parse_args()
+    analyze_company_patents(args.output_file, args.patent_file)
     # print("演示查询功能:")
     # load_and_query_results()
     

@@ -13,145 +13,6 @@ sys.path.append('.')
 #     with pd.ExcelWriter('regress_data_with_gdp.xlsx', engine='openpyxl') as writer:
 #         df.to_excel(writer, sheet_name='回归数据')
 
-
-def prepare_panel_data(data_type):
-    """
-    准备面板数据结构
-    
-    参数:
-    df: 包含投资和专利数据的DataFrame
-    
-    返回:
-    panel_df: 面板数据DataFrame
-    """
-    file = 'patent_analysis/regress_data_patents.xlsx' if data_type == 'patent' else 'patent_analysis/regress_data_citations.xlsx'
-    df = pd.read_excel(file, sheet_name='回归数据')
-    df = df.dropna(subset=['省份'])
-    df = df[df['省份'] !='台湾']
-    
-    # 创建前3年和后3年的观测值
-    panel_data = []
-    
-    for idx, row in df.iterrows():
-        company = row['公司名称']
-        investment_year = row['投资年份']
-        treatment = row['treatment']
-        province = row['省份']
-        
-        # 前3年数据 (post=0)
-        for year_offset in range(1, 4):
-            year = investment_year - year_offset
-            if year >= 1992:  # 确保年份在专利数据范围内
-                if data_type == 'patent':
-                    patent_count = row[f'前3年专利数_前{year_offset}年']
-                    gdp_value = row[f'前3年GDP_前{year_offset}年']
-                    ln_gdp = row[f'ln_前3年GDP_前{year_offset}年']
-                    
-                    panel_data.append({
-                        'company': company,
-                        'year': year,
-                        'investment_year': investment_year,
-                        'treatment': treatment,
-                        'post': 0,  # 投资前
-                        'patent_count': patent_count,
-                        'ln_patents_plus_1': np.log(patent_count + 1),
-                        '省份': province,
-                        'gdp': gdp_value,
-                        'ln_gdp': ln_gdp,
-                        'time_to_investment': year_offset,
-                        'period': 'pre',
-                        '投资阶段':row['投资阶段'],
-                    })
-                else:
-                    citations = row[f'前3年被引证数_前{year_offset}年']
-                    gdp_value = row[f'前3年GDP_前{year_offset}年']
-                    ln_gdp = row[f'ln_前3年GDP_前{year_offset}年']
-                    
-                    panel_data.append({
-                        'company': company,
-                        'year': year,
-                        'investment_year': investment_year,
-                        'treatment': treatment,
-                        'post': 0,  # 投资前
-                        'citation_count': citations,
-                        'ln_citations_plus_1': np.log(citations + 1),
-                        '省份': province,
-                        'gdp': gdp_value,
-                        'ln_gdp': ln_gdp,
-                        'time_to_investment': year_offset,
-                        'period': 'pre',
-                        '投资阶段':row['投资阶段'],
-                    })
-        
-        # 后3年数据 (post=1)
-        for year_offset in range(1, 4):
-            year = investment_year + year_offset
-            if year <= 2025:  # 确保年份在专利数据范围内
-                if data_type == 'patent':
-                    patent_count = row[f'后3年专利数_后{year_offset}年']
-                    gdp_value = row[f'后3年GDP_后{year_offset}年']
-                    ln_gdp = row[f'ln_后3年GDP_后{year_offset}年']
-                    
-                    panel_data.append({
-                        'company': company,
-                        'year': year,
-                        'investment_year': investment_year,
-                        'treatment': treatment,
-                        'post': 1,  # 投资后
-                        'patent_count': patent_count,
-                        'ln_patents_plus_1': np.log(patent_count + 1),
-                        '省份': province,
-                        'gdp': gdp_value,
-                        'ln_gdp': ln_gdp,
-                        'time_to_investment': -year_offset,
-                        'period': 'post',
-                        '投资阶段':row['投资阶段'],
-                    })
-                else:
-                    citations = row[f'后3年被引证数_后{year_offset}年']
-                    gdp_value = row[f'后3年GDP_后{year_offset}年']
-                    ln_gdp = row[f'ln_后3年GDP_后{year_offset}年']
-                    
-                    panel_data.append({
-                        'company': company,
-                        'year': year,
-                        'investment_year': investment_year,
-                        'treatment': treatment,
-                        'post': 1,  # 投资后
-                        'citation_count': citations,
-                        'ln_citations_plus_1': np.log(citations + 1),
-                        '省份': province,
-                        'gdp': gdp_value,
-                        'ln_gdp': ln_gdp,
-                        'time_to_investment': -year_offset,
-                        'period': 'post',
-                        '投资阶段':row['投资阶段'],
-                    })
-    
-    # 创建面板数据框
-    print("3. 创建面板数据框...")
-    panel_df = pd.DataFrame(panel_data)
-    print(f"   - 面板数据行数: {len(panel_df):,}")
-    print(f"   - 面板数据列数: {len(panel_df.columns)}")
-    
-    # 数据统计
-    print("4. 面板数据统计...")
-    print(f"   - 公司数量: {panel_df['company'].nunique():,}")
-    print(f"   - 年份范围: {panel_df['year'].min()} - {panel_df['year'].max()}")
-    print(f"   - 投资年份范围: {panel_df['investment_year'].min()} - {panel_df['investment_year'].max()}")
-    
-    # 按treatment和post分组统计
-    if data_type == 'patent':
-        group_stats = panel_df.groupby(['treatment', 'post'])['ln_patents_plus_1'].agg(['count', 'mean', 'std']).round(4)
-    else:
-        group_stats = panel_df.groupby(['treatment', 'post'])['ln_citations_plus_1'].agg(['count', 'mean', 'std']).round(4)
-    print(f"\n5. 分组统计:")
-    print(group_stats)
-
-    write_panel_data(data_type, panel_df)
-    
-    return panel_df
-
 def _generate_dummy_variables(data_type,panel_df):
     """
     生成虚拟变量
@@ -423,6 +284,11 @@ def add_employment_col(df):
     df['二产就业比例'] = pd.Series(employment_values)
     return df
 
+def add_lagged_patent_col(df):
+    df['lagged_patent_count'] = df['ln_patents_plus_1'].shift(1)
+    df.dropna(inplace=True)
+    return df
+
 def perform_did_regression(data_type):
 
     try:
@@ -430,23 +296,22 @@ def perform_did_regression(data_type):
 
         if choice == '1': 
             # 2. 准备面板数据
-            # panel_df = read_panel_data(data_type)
-            panel_df = prepare_panel_data(data_type)
+            panel_df = read_panel_data(data_type)
+            # panel_df = prepare_panel_data(data_type)
             
-            panel_df = add_urban_col(panel_df)
-            panel_df = add_fixed_invest_col(panel_df)
+            # panel_df = add_urban_col(panel_df)
+            # panel_df = add_fixed_invest_col(panel_df)
 
             
-            panel_df = add_industry_col(panel_df)
-            panel_df = add_employment_col(panel_df)
-            panel_df = _generate_dummy_variables(data_type, panel_df)
+            # panel_df = add_industry_col(panel_df)
+            # panel_df = add_employment_col(panel_df)
+            # panel_df = _generate_dummy_variables(data_type, panel_df)
+            panel_df = add_lagged_patent_col(panel_df)
             
             write_panel_data(data_type, panel_df)
             
         elif choice == '2':
             _perform_regression(data_type, province_dummy=True, stage_dummy=True)
-        
-        
         
     except Exception as e:
         print(f"执行带年份虚拟变量的DID回归时出现错误: {e}")
@@ -469,9 +334,52 @@ def write_panel_data(data_type, panel_df):
         panel_df.to_excel('patent_analysis/did_panel_data_patents.xlsx', sheet_name='面板数据', index=False)
 
 if __name__ == "__main__":
-    # 执行带年份虚拟变量的DID回归分析
-    # 可以通过参数控制是否启用省份虚拟变量和时间虚拟变量
-    result = perform_did_regression(
-        data_type='patent',
+    import argparse
     
-    )
+    parser = argparse.ArgumentParser(description='DID回归分析')
+    parser.add_argument('--data_type', 
+                       choices=['patent', 'citation'], 
+                       default='patent',
+                       help='数据类型：patent(专利数量) 或 citation(被引证次数)')
+    parser.add_argument('--province_dummy', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否启用省份虚拟变量')
+    parser.add_argument('--stage_dummy', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否启用投资阶段虚拟变量')
+    parser.add_argument('--add_gdp', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否添加GDP控制变量')
+    parser.add_argument('--add_urban', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否添加城镇化率控制变量')
+    parser.add_argument('--add_fixed_invest', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否添加固定资产投资控制变量')
+    parser.add_argument('--add_industry', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否添加第二产业比例控制变量')
+    parser.add_argument('--add_employment', 
+                       type=lambda x: x.lower() == 'true',
+                       default=True,
+                       help='是否添加第二产业就业比例控制变量')
+    
+    args = parser.parse_args()
+    
+    print(f"=== DID回归分析 - {args.data_type} ===")
+    print(f"省份虚拟变量: {args.province_dummy}")
+    print(f"投资阶段虚拟变量: {args.stage_dummy}")
+    print(f"GDP控制变量: {args.add_gdp}")
+    print(f"城镇化率控制变量: {args.add_urban}")
+    print(f"固定资产投资控制变量: {args.add_fixed_invest}")
+    print(f"第二产业比例控制变量: {args.add_industry}")
+    print(f"第二产业就业比例控制变量: {args.add_employment}")
+    
+    # 执行DID回归分析
+    result = perform_did_regression(data_type=args.data_type)
