@@ -10,13 +10,12 @@ CITATION_COUNT = 'citation_count'
 INVENTION_COUNT = 'invention_count'
 INVENTION_CITATION = 'invention_citation'
 
-def read_panel_data():
-    file = 'patent_analysis/regression_panel_data.xlsx'
+def read_panel_data(input_file='patent_analysis/regression_panel_data.xlsx'):
     sheet_name = '面板数据'
-    return pd.read_excel(file, sheet_name=sheet_name)
+    return pd.read_excel(input_file, sheet_name=sheet_name)
 
-def main(province_dummy, stage_dummy, output_file):
-    panel_df = read_panel_data()
+def main(province_dummy, stage_dummy, input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
+    panel_df = read_panel_data(input_file)
     panel_df.set_index(['company', 'year'], inplace=True)
    
     control_vars = ['treatment','treatment_post', 'GDP','城镇化率','固定资产投资','二产就业比例']
@@ -111,12 +110,15 @@ def regress(y, X, output_file,sheet_name):   # 执行PanelOLS回归
     print("\n回归结果:")
     print("=" * 80)
     print(results)
+    
     print("=" * 80)
 
     print(f"保存回归结果到: {output_file}")
+    # with open(output_file, "w", newline="") as csvfile:
+    # with open(f'{output_file}_{sheet_name}.csv', "w", newline="") as csvfile:
+    # csvfile.write(results.summary.as_csv())
+    # df = pd.DataFrame(pd.read_csv("output.csv"))
     with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
-
-        # 保存回归结果摘要
         results_summary = pd.DataFrame({
             '变量': results.params.index,
             '系数': results.params.values,
@@ -127,14 +129,17 @@ def regress(y, X, output_file,sheet_name):   # 执行PanelOLS回归
             '置信区间上限': results.conf_int().iloc[:, 1].values
         })
         results_summary.to_excel(writer, sheet_name=sheet_name, index=False)
-        print(f"   - 回归结果已保存到{sheet_name}工作表")
+    print(f"   - 回归结果已保存到{sheet_name}工作表")
        
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='创建回归面板数据')
+    parser.add_argument('--input_file', 
+                       default='patent_analysis/regression_panel_data.xlsx',
+                       help='输入文件路径')
     parser.add_argument('--output_file', 
                        default='patent_analysis/did_results.xlsx'
                     )
     args = parser.parse_args()
-    # main(province_dummy=True, stage_dummy=True, output_file=args.output_file)
-    main_lagged(province_dummy=True, stage_dummy=True, output_file= 'patent_analysis/did_results_lagged.xlsx')
+    main(province_dummy=True, stage_dummy=True, input_file=args.input_file, output_file=args.output_file)
+    # main_lagged(province_dummy=True, stage_dummy=True, output_file= 'patent_analysis/did_results_lagged.xlsx')
 
