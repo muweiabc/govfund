@@ -1,3 +1,23 @@
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+mpl.rcParams['text.usetex'] = True
+
+# 如果需要显示中文，请确保你的系统安装了 LaTeX 中文字体
+# 并且你的 LaTeX 编译器支持（如 XeLaTeX）
+# 这行代码告诉 Matplotlib 使用 ctex 宏包来处理中文
+mpl.rcParams['text.latex.preamble'] = r'\usepackage{ctex}'
+# 创建一个图
+# fig = plt.figure()
+fig, ax = plt.subplots()
+
+
+# 在图中添加文本，并使用 LaTeX 格式
+# 注意：需要用r'...'来创建一个原始字符串，这样Python就不会对\进行转义
+# 使用$$...$$可以显示数学模式
+formula = r"""
+
+\documentclass[UTF8]{ctexart}
+\begin{document}
 \begin{table}
 \caption{}
 \label{}
@@ -33,3 +53,12 @@ R-sq           & 0.0170   & 0.0122   & 0.0037  & 0.0031  & 0.0029  & 0.0013  & 0
 \bigskip
 Standard errors in parentheses. \newline 
 * p<.1, ** p<.05, ***p<.01
+\end{document}"""
+
+ax.text(0.5, 0.5, formula, fontsize=20)
+
+# 隐藏坐标轴
+ax.axis('off')
+
+# 显示图
+plt.show()

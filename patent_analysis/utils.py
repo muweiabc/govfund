@@ -22,6 +22,15 @@ def rename_urban():
     with pd.ExcelWriter(file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
         urban_df.to_excel(writer, sheet_name='原始版本', index=False)
 
+def add_ln():
+    df = pd.read_excel('patent_analysis/regression_panel_data.xlsx', sheet_name='面板数据')
+    df['lnGDP'] = np.log(df['GDP'] + 1)
+    df['lnFixedInvestment'] = np.log(df['固定资产投资'] + 1)
+
+    with pd.ExcelWriter('patent_analysis/regression_panel_data.xlsx', engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+        df.to_excel(writer, sheet_name='面板数据1', index=False)
+
 if __name__ == "__main__":
     # add_province_investment()
-    invest_filter_province()
+    # invest_filter_province()
+    add_ln()
