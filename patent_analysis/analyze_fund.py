@@ -93,6 +93,53 @@ def get_gdp(province, year, gdplist):
     row = gdplist[(gdplist['省级'] == province) & (gdplist['年份'] == year)]
     return row.iloc[:,2]
 
+def fund_clean():
+    """
+    
+     从invest中提取被投资企业所在省份
+    """
+    FUND_FILE = 'govfund_filtered.xlsx'
+    df = pd.read_excel(FUND_FILE)
+    df['成立时间'] = pd.to_datetime(df['成立时间'], errors='coerce')
+    df = df.dropna(subset=['成立时间'])  # 删除无法转换的日期
+    
+    df['成立年份'] = df['成立时间'].dt.year
+    def extract_province(region):
+        # 处理"中国|省份|城市|区县"格式
+        parts = str(region).split('|')
+        if len(parts) >= 2:
+            return parts[1]  # 返回省份部分
+        else:
+            return region
+    filtered_df = df[(df['注册地区'] != '--') & (df['注册地区']!='中国') ]
+    filtered_df['省份'] = filtered_df['注册地区'].apply(extract_province)
+
+    with pd.ExcelWriter(FUND_FILE, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+        # 保存面板数据
+        filtered_df.to_excel(writer, sheet_name='fund处理', index=False)
+
+def read_invest_panel():
+    df = pd.read_excel('invest.xlsx',sheet_name='基金所属省份')
+    return df
+
+def write_invest_panel(df, sheet):
+    with pd.ExcelWriter('invest.xlsx', engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+        df.to_excel(writer, sheet_name=sheet, index=False)
+
+def add_group_tag(df):
+    """
+     添加投资基金和被投企业省份是否相同标签
+    """
+    def compare(row):
+        p1,p2 = row['省份'], row['基金所属省份']
+        if p1.endswith('市') or p1.endswith('省'):
+            p1 = p1[0:-1]
+        return p1==p2
+
+    df['same_location'] = df.apply(compare,axis=1)
+    return df
+
+
 def fund_time_and_spatial():
     """
     分析政府引导基金的时间和空间分布
@@ -103,10 +150,10 @@ def fund_time_and_spatial():
     df = pd.read_excel('govfund_filtered.xlsx')
     
     # 将成立时间转换为日期时间格式
-    df['成立时间'] = pd.to_datetime(df['成立时间'], errors='coerce')
-    df = df.dropna(subset=['成立时间'])  # 删除无法转换的日期
+    # df['成立时间'] = pd.to_datetime(df['成立时间'], errors='coerce')
+    # df = df.dropna(subset=['成立时间'])  # 删除无法转换的日期
     
-    df['成立年份'] = df['成立时间'].dt.year
+    # df['成立年份'] = df['成立时间'].dt.year
     
     # 创建图形
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
@@ -128,19 +175,7 @@ def fund_time_and_spatial():
     
     # 2. 基金省份分布图
     # 处理注册地区数据，提取省份信息
-    def extract_province(region):
-        """从注册地区中提取省份信息"""
-        if pd.isna(region) or region == '--':
-            return '未知'
-        
-        # 处理"中国|省份|城市|区县"格式
-        parts = str(region).split('|')
-        if len(parts) >= 2:
-            return parts[1]  # 返回省份部分
-        else:
-            return region
     
-    df['省份'] = df['注册地区'].apply(extract_province)
     fund_province = df['省份'].value_counts()
     
     # 只显示前15个省份，其他归为"其他"
@@ -426,12 +461,109 @@ def patent_analysis():
     
     return patent_year, patent_type
 
+def fund_location():
+    """
+     提取投资基金所在省份
+    """
+    file = 'invest.xlsx'
+
+    # 2. 读取文件（假设文件已上传并可访问）
+    try:
+        # 假设文件内容已经加载到环境中
+        df = pd.read_excel(file,sheet_name='有专利公司首次投资')
+    except FileNotFoundError:
+        # 实际使用中，如果文件路径不可用，会在这里失败。
+        # 为了演示，我将使用一个示例数据框模拟加载后的情况。
+        print(f"注意：文件 无法直接访问。")
+        
+
+    # 3. 定义省份和城市映射规则
+    # 包含所有省、自治区、直辖市、特别行政区的名称（避免使用简称如“蒙”、“宁”、“新”等）
+    provinces = [
+        '北京', '天津', '河北', '山西', '内蒙古', '辽宁', '吉林', '黑龙江', '上海', 
+        '江苏', '浙江', '安徽', '福建', '江西', '山东', '河南', '湖北', '湖南', 
+        '广东', '广西', '海南', '重庆', '四川', '贵州', '云南', '西藏', '陕西', 
+        '甘肃', '青海', '宁夏', '新疆', '香港', '澳门', '台湾'
+    ]
+
+    # 重点城市到省份的映射 (用于避免只出现城市名但属于某个省份的情况)
+    city_to_province = {
+        # **直辖市/特别行政区 (保留，以便名称中出现'市'也能正确识别)**
+        '北京': '北京', '天津': '天津', '上海': '上海', '重庆': '重庆', 
+        '香港': '香港', '澳门': '澳门',
+        
+        # **华北地区**
+        '石家庄': '河北', '太原': '山西', '呼和浩特': '内蒙古','鄂尔多斯': '内蒙古',
+        
+        # **东北地区** (副省级市: 沈阳, 大连, 哈尔滨, 长春)
+        '沈阳': '辽宁', '大连': '辽宁', '长春': '吉林', '哈尔滨': '黑龙江',
+        
+        # **华东地区** (省会和计划单列市: 南京, 杭州, 济南, 青岛, 厦门, 宁波)
+        '南京': '江苏', '苏州': '江苏', '无锡': '江苏', '杭州': '浙江', '宁波': '浙江', '合肥': '安徽',
+        '福州': '福建', '厦门': '福建', '南昌': '江西', '济南': '山东', '青岛': '山东',
+        
+        # **华中地区** (省会城市)
+        '郑州': '河南', '武汉': '湖北', '长沙': '湖南',
+        
+        # **华南地区** (省会和副省级市: 广州, 深圳)
+        '广州': '广东', '深圳': '广东', '南宁': '广西', '海口': '海南',
+        
+        # **西南地区** (省会和副省级市: 成都)
+        '成都': '四川', '贵阳': '贵州', '昆明': '云南', '拉萨': '西藏',
+        
+        # **西北地区** (省会城市)
+        '西安': '陕西', '兰州': '甘肃', '西宁': '青海', '银川': '宁夏', '乌鲁木齐': '新疆',
+        
+        # **台湾（作为地区处理）**
+        '台北': '台湾', '高雄': '台湾',
+    }
+
+    # 合并所有关键词，优先匹配城市，其次匹配省份
+    keywords = {**city_to_province, **{p: p for p in provinces}}
+
+    # 4. 定义识别函数
+    def identify_province(fund_name):
+        # 优先匹配城市，然后映射到省份
+        for city, province in city_to_province.items():
+            if city in fund_name:
+                return province
+
+        # 匹配省份/直辖市/自治区/特别行政区
+        for p in provinces:
+            if p in fund_name:
+                # 对于自治区，返回其简称，如“内蒙古”
+                return p
+        
+        # 兜底处理：如果名称中含有“国家”、“中央”、“中国”或“全国”，统一标记为“中央级”
+        # 注意：根据用户要求，这里将中央级的也标记为“缺失”
+        # if any(k in fund_name for k in ['国家', '中央', '中国', '全国']):
+        #     return '中央级'
+
+        return
+
+    # 5. 应用函数创建新字段
+    df['基金所属省份'] = df['投资方全称'].apply(identify_province)
+    df.dropna(subset=['基金所属省份'],inplace=True)
+
+    # 6. 显示结果
+    print("--- 原始数据（部分）与新字段结果 ---")
+    print(df[['投资方全称', '基金所属省份']].head(10))
+
+    with pd.ExcelWriter(file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+        df.to_excel(writer, sheet_name='基金所属省份', index=False)
+
+
 def main():
     # 分析基金时间和空间分布
     # fund_time_and_spatial()
     
     # 分析专利数据
-    patent_analysis()
+    # patent_analysis()
+    # fund_clean()
+    df = read_invest_panel()
+    df = add_group_tag(df)
+    write_invest_panel(df, 'location')
+    # fund_location()
 
 if __name__ == "__main__":
     main()

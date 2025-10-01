@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2025.9.18)  27 SEP 2025 10:03
+This is XeTeX, Version 3.141592653-2.6-0.999997 (TeX Live 2025) (preloaded format=xelatex 2025.9.18)  29 SEP 2025 12:01
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -313,37 +313,34 @@ LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
 (Font)                  OT1/cmss/bx/n --> TU/lmss/b/n on input line 2.
 LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
 (Font)                  OT1/cmtt/m/n --> TU/lmtt/b/n on input line 2.
- (./raw.tex
+ (./stage.tex
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <10.53937> on input line 5.
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <7> on input line 5.
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <5> on input line 5.
-
-Overfull \hbox (32.33615pt too wide) in paragraph at lines 5--31
- [] 
- []
-
 )
 
 [1
 
-]
-
-[2] (./regression_results.aux)
+] (./regression_results.aux)
  ***********
 LaTeX2e <2024-11-01> patch level 2
 L3 programming layer <2022/07/14>
  ***********
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
  ) 
 Here is how much of TeX's memory you used:
  6444 strings out of 473832
- 198956 string characters out of 5729481
- 628304 words of memory out of 5000000
+ 198968 string characters out of 5729481
+ 624304 words of memory out of 5000000
  29479 multiletter control sequences out of 15000+600000
  561531 words of font info for 58 fonts, out of 8000000 for 9000
  1348 hyphenation exceptions out of 8191
  93i,8n,114p,373b,281s stack positions out of 10000i,1000n,20000p,200000b,200000s
 
-Output written on regression_results.pdf (2 pages).
+Output written on regression_results.pdf (1 page).

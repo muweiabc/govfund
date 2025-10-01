@@ -88,6 +88,7 @@ def create_regression_data(input_file='invest.xlsx',
                     PROVINCE: province,
                     STAGE: investment_stage,
                     'year_offset': year_offset,
+                    'same_location':row['same_location']
                 }
                 
                 panel_data.append(panel_record)
@@ -161,7 +162,7 @@ def read_panel_data()->pd.DataFrame:
 
 def write_panel_data(panel_df, output_file):
     sheet_name = '面板数据'
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
         panel_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 def add_patent(df)->pd.DataFrame:
@@ -264,6 +265,20 @@ def add_employment_col(df):
     
     return df
 
+def add_stage(df):
+    invest_df = pd.read_excel('invest.xlsx')
+    def _add_stage(row, invest_df):
+        company = row['company']
+        filtered_invest_df = invest_df[invest_df['融资主体'] == company]
+        if len(filtered_invest_df) == 0:
+            print('error: not found investment')
+        stage = filtered_invest_df.iloc[0]['投资阶段']
+        row['stage'] = stage
+        return row
+
+    df = df.apply(_add_stage, axis = 1, args=(invest_df,))
+    return df
+
 def _generate_dummy_variables(panel_df):
     print("生成虚拟变量...")
     # province_cols = panel_df[PROVINCE]
@@ -275,17 +290,18 @@ def _generate_dummy_variables(panel_df):
 
 def main(args):
     # 创建面板数据
-    # panel_df = create_regression_data(
-    #     input_file=args.input_file,
-    #     sheet_name=args.sheet_name,
-    #     output_file=args.output_file
-    # )
-    panel_df = read_panel_data()
+    panel_df = create_regression_data(
+        input_file=args.input_file,
+        sheet_name=args.sheet_name,
+        output_file=args.output_file
+    )
+    # panel_df = read_panel_data()
     panel_df = add_gdp(panel_df)
-    # panel_df = add_patent(panel_df)
+    panel_df = add_patent(panel_df)
     panel_df = add_urban_col(panel_df)
     panel_df = add_fixed_invest_col(panel_df)
     panel_df = add_employment_col(panel_df)
+    panel_df = add_stage(panel_df)
     print(panel_df.head(5))
     print(panel_df.columns)
     panel_df = _generate_dummy_variables(panel_df)
@@ -299,10 +315,12 @@ if __name__ == "__main__":
                        default='invest.xlsx',
                        help='投资数据文件路径')
     parser.add_argument('--sheet_name', 
-                       default='有专利公司首次投资',
+                    #    default='有专利公司首次投资',
+                       default='location',
                        help='工作表名称')
     parser.add_argument('--output_file', 
-                       default='patent_analysis/regression_panel_data.xlsx',
+                    #    default='patent_analysis/regression_panel_data.xlsx',
+                       default='patent_analysis/regression_data_location.xlsx',
                        help='输出文件路径')
     parser.add_argument('--analyze', 
                        action='store_true',

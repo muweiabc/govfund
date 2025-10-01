@@ -42,6 +42,9 @@ def read_panel_data(input_file='patent_analysis/regression_panel_data.xlsx'):
     return pd.read_excel(input_file, sheet_name=sheet_name)
 
 def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
+    """
+    对全部投资进行回归：1依次添加解释变量做稳定性检验；2更改被解释变量，用所有解释变量，做4个回归
+    """
     panel_df = read_panel_data(input_file)
     panel_df.set_index(['company', 'year'], inplace=True)
     control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
@@ -133,26 +136,79 @@ def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='p
     regress(y_invention_citation,X, output_file, INVENTION_CITATION)             # stage_cols.append(col)
 
 def stage_regress(input_file, output_file):
+    """按投资时公司发展阶段分组回归
+    """
     panel_df = read_panel_data(input_file)
     panel_df.set_index(['company', 'year'], inplace=True)
-    STAGE_EXPANSION = '扩张期'    
-    STAGE_GROWTH = '成熟期'   
-    STAGE_STARTUP = '初创期'    
-    STAGE_SEED = '种子期'   
-    panel_df = panel_df[panel_df['投资阶段'] == STAGE_SEED]
     control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
+        
+    # province_cols = []
+    # for col in panel_df.columns:
+    #     if col.startswith('省份'):
+    #         control_vars.append(col)
+    #         province_cols.append(col)
+
+    STAGES = ['种子期','初创期','扩张期', '成熟期' ]
+    result_list = []
+    for stage in STAGES: 
+        stage_df = panel_df[panel_df['stage'] == stage]
+        y = np.log(stage_df[PATENT_COUNT]+1)
+        x = stage_df[control_vars]
+        result = regress(y,x,output_file=output_file, sheet_name=stage)
+        result_list.append(LinearmodelsResultsWrapper(result))
+        # with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        #     stas_x.to_excel(writer, sheet_name='回归变量统计')
     
+    model_names = [f'({i})' for i in range(1, len(STAGES)+1)]
+
+    info_dict = {
+        'N': lambda x: f'{int(x.nobs)}',
+    }
+
+    regressor_order = [TREATMENT_POST, TREATMENT,LN_GDP, SECONDARY_EMPLOYMENT_RATIO,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+
+    table = summary_col(
+        results=result_list,
+        model_names=model_names,
+        info_dict=info_dict,
+        float_format='%0.3f',
+        regressor_order=regressor_order,
+        stars=True
+    )
+
+    with open('patent_analysis/tex/stage.tex', 'w', encoding='utf-8') as f:
+        f.write(table.as_latex())
+
+def region_regress(input_file, output_file):
+    """
+    按基金和公司省份是否相同分组回归
+    """
+    panel_df = read_panel_data(input_file)
+    panel_df.set_index(['company', 'year'], inplace=True)
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
+    control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]
+        
     province_cols = []
     for col in panel_df.columns:
         if col.startswith('省份'):
-            control_vars.append(col)
             province_cols.append(col)
+    
     stage_cols = []
     for col in panel_df.columns:
         if col.startswith('投资阶段'):
-            control_vars.append(col)
             stage_cols.append(col)
 
+    SAME_LOCATION = [True, False]
+    result_list = []
+    for same_location in SAME_LOCATION:
+        same_location_df = panel_df
+        same_location_df = panel_df[panel_df['same_location'] == same_location]
+        y = np.log(same_location_df[CITATION_COUNT]+1)
+        x = same_location_df[control_vars + stage_cols]
+        
+        result = regress(y,x,output_file=output_file, sheet_name=str(same_location))
+        result_list.append(LinearmodelsResultsWrapper(result))
 
 def main_lagged(output_file):
     panel_df = read_panel_data()
@@ -241,6 +297,10 @@ if __name__ == "__main__":
                        default='patent_analysis/did_results.xlsx'
                     )
     args = parser.parse_args()
-    main(input_file=args.input_file, output_file=args.output_file)
+    # main(input_file=args.input_file, output_file=args.output_file)
     # main_lagged(province_dummy=True, stage_dummy=True, output_file= 'patent_analysis/did_results_lagged.xlsx')
+    # stage_regress(args.input_file,'patent_analysis/stage.xlsx')
+    region_regress('patent_analysis/regression_data_location.xlsx','patent_analysis/did_region.xlsx')
+    # region_regress(input_file='patent_analysis/regression_panel_data.xlsx',output_file='patent_analysis/did_region.xlsx')
+# 
 

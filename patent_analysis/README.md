@@ -10,9 +10,10 @@
 
 ### company_patent_analysis.py 读取trimpatent_all，按公司和年份统计输出到`company_patent.yearly`
 
-### preparedata.py 读取`invest.xlsx`,提取投资年份，从 `company_patent_yearly.xlsx`获得投资前后三年的专利数，输出为`regress_data.xlsx`
+### patent_analysis/create_regression_data.py.py 读取`invest.xlsx`,提取投资年份，从 `company_patent_yearly.xlsx`获得投资前后三年的专利数，输出为`regress_panel_data.xlsx` 
+和 `regression_data_location`
 
-### did.py 读取`regress_data`，生成面板数据和treatment_post，调用panelols进行回归，可配置时间固定效应和个体固定效应
+### regress.py 读取`regress_panel_data`，生成面板数据和treatment_post，调用panelols进行回归，可配置时间固定效应和个体固定效应
 
 数据范围：
 就业人口：2000-2023
