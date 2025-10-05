@@ -160,8 +160,8 @@ def read_panel_data()->pd.DataFrame:
     sheet_name = '面板数据'
     return pd.read_excel(file, sheet_name=sheet_name)
 
-def write_panel_data(panel_df, output_file):
-    sheet_name = '面板数据'
+def write_panel_data(panel_df, output_file,sheet_name = '面板数据'):
+    
     with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
         panel_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
@@ -279,34 +279,59 @@ def add_stage(df):
     df = df.apply(_add_stage, axis = 1, args=(invest_df,))
     return df
 
+def add_region(df):
+    EAST = ['北京','天津','河北','上海','江苏','浙江','福建','山东','广东','海南']
+    MIDDLE = ['山西','安徽','江西','河南','湖北','湖南']
+    WEST = ['内蒙古','广西','重庆','四川','贵州','云南','西藏','陕西','甘肃','青海','宁夏','新疆']
+    NORTHEAST = ['辽宁','吉林','黑龙江']
+    def _add_region(row):
+        province = row['原省份']
+        if province.endswith('省') or province.endswith('市'):
+            province = province[:-1]
+        if province in EAST:
+            return '东部'
+        elif province in MIDDLE:
+            return '中部'
+        elif province in WEST:
+            return '西部'
+        elif province in NORTHEAST:
+            return '东北'
+        return ''
+    df['region'] = df.apply(_add_region, axis=1)
+    return df
+
 def _generate_dummy_variables(panel_df):
+    REGION = 'region'
     print("生成虚拟变量...")
     # province_cols = panel_df[PROVINCE]
     # 使用pd.get_dummies创建省份虚拟变量
-    panel_dummies = pd.get_dummies(panel_df, columns=[PROVINCE,STAGE], prefix=[PROVINCE,STAGE], drop_first=True, dtype=int)
-    panel_dummies['原省份'] = panel_df[PROVINCE]
+    # panel_dummies = pd.get_dummies(panel_df, columns=[PROVINCE,STAGE,REGION], prefix=[PROVINCE,STAGE,REGION], drop_first=True, dtype=int)
+    # panel_dummies['原省份'] = panel_df[PROVINCE]
+    panel_dummies = pd.get_dummies(panel_df, columns=[REGION], prefix=[REGION], drop_first=True, dtype=int)
+    
     print("   - 创建虚拟变量完成 ")
     return panel_dummies
 
 def main(args):
     # 创建面板数据
-    panel_df = create_regression_data(
-        input_file=args.input_file,
-        sheet_name=args.sheet_name,
-        output_file=args.output_file
-    )
-    # panel_df = read_panel_data()
-    panel_df = add_gdp(panel_df)
-    panel_df = add_patent(panel_df)
-    panel_df = add_urban_col(panel_df)
-    panel_df = add_fixed_invest_col(panel_df)
-    panel_df = add_employment_col(panel_df)
-    panel_df = add_stage(panel_df)
+    # panel_df = create_regression_data(
+    #     input_file=args.input_file,
+    #     sheet_name=args.sheet_name,
+    #     output_file=args.output_file
+    # )
+    panel_df = read_panel_data()
+    # panel_df = add_gdp(panel_df)
+    # panel_df = add_patent(panel_df)
+    # panel_df = add_urban_col(panel_df)
+    # panel_df = add_fixed_invest_col(panel_df)
+    # panel_df = add_employment_col(panel_df)
+    # panel_df = add_stage(panel_df)
+    panel_df = add_region(panel_df)
     print(panel_df.head(5))
     print(panel_df.columns)
     panel_df = _generate_dummy_variables(panel_df)
     
-    write_panel_data(panel_df, args.output_file)
+    write_panel_data(panel_df, args.output_file,sheet_name = '面板数据1')
     
 
 if __name__ == "__main__":
@@ -319,8 +344,8 @@ if __name__ == "__main__":
                        default='location',
                        help='工作表名称')
     parser.add_argument('--output_file', 
-                    #    default='patent_analysis/regression_panel_data.xlsx',
-                       default='patent_analysis/regression_data_location.xlsx',
+                       default='patent_analysis/regression_panel_data.xlsx',
+                    #    default='patent_analysis/regression_data_location.xlsx',
                        help='输出文件路径')
     parser.add_argument('--analyze', 
                        action='store_true',
