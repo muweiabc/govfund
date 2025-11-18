@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from collections import Counter
+import traceback
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
@@ -127,6 +128,102 @@ def analyze_province_distribution(file_path='invest.xlsx', sheet_name='有专利
     
     return province_counts.to_dict()
 
+def draw_govfund_investment_piechart():
+    """
+    绘制政府基金投资事件的省份分布饼图
+    """
+    print("=== 绘制政府基金投资事件省份分布饼图 ===")
+    
+    try:
+        # 读取投资数据
+        df = pd.read_csv('invest_by_govfund.csv')
+        print(f"成功读取投资数据，共 {len(df)} 条记录")
+        
+        df['省份'] = df['地区'].apply(lambda x: x.split('|')[1] if '|' in str(x) else str(x))
+        # 处理省份数据
+        df['省份'] = df['省份'].fillna('未知')
+        df['省份'] = df['省份'].astype(str)
+        
+        # 统计各省份投资事件数量
+        province_counts = df['省份'].value_counts()
+        print(f"\n省份投资事件统计:")
+        print(province_counts.head(10))
+        
+        # 创建饼图
+        plt.figure(figsize=(12, 10))
+        
+        # 只显示前10个省份，其余合并为"其他"
+        top_provinces = province_counts.head(10)
+        other_count = province_counts.iloc[10:].sum() if len(province_counts) > 10 else 0
+        
+        # 准备饼图数据
+        if other_count > 0:
+            pie_data = list(top_provinces.values) + [other_count]
+            pie_labels = list(top_provinces.index) + ['其他']
+        else:
+            pie_data = list(top_provinces.values)
+            pie_labels = list(top_provinces.index)
+        
+        # 设置颜色
+        colors = plt.cm.Set3(np.linspace(0, 1, len(pie_data)))
+        
+        # 绘制饼图
+        wedges, texts, autotexts = plt.pie(pie_data, 
+                                          labels=pie_labels,
+                                          autopct='%1.1f%%',
+                                          colors=colors,
+                                          startangle=90,
+                                          )  # 稍微分离每个扇形
+        
+        plt.title('政府基金投资事件省份分布', fontsize=16, fontweight='bold', pad=20)
+        
+        # 调整标签样式
+        for autotext in autotexts:
+            autotext.set_color('white')
+            autotext.set_fontweight('bold')
+            autotext.set_fontsize(10)
+        
+        # 添加图例，显示具体数量
+        legend_labels = [f'{label}: {value:,}个' for label, value in zip(pie_labels, pie_data)]
+        plt.legend(wedges, legend_labels, 
+                  title="省份投资事件统计", 
+                  loc="center left", 
+                  bbox_to_anchor=(1, 0, 0.5, 1))
+        
+        # 确保图形是圆形
+        plt.axis('equal')
+        
+        # 保存图片
+        plt.tight_layout()
+        plt.savefig('patent_analysis/graph/govfund_investment_province_pie.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # 打印详细统计信息
+        print(f"\n=== 省份投资事件详细统计 ===")
+        print(f"总投资事件数: {len(df):,}")
+        print(f"涉及省份数: {len(province_counts)}")
+        print(f"\n前10个省份:")
+        for i, (province, count) in enumerate(top_provinces.items(), 1):
+            percentage = count / len(df) * 100
+            print(f"{i:2d}. {province}: {count:,}个 ({percentage:.1f}%)")
+        
+        if other_count > 0:
+            other_percentage = other_count / len(df) * 100
+            print(f"    其他: {other_count:,}个 ({other_percentage:.1f}%)")
+        
+        return province_counts
+        
+    except FileNotFoundError:
+        print("错误: 找不到文件 'invest_by_govfund.csv'")
+        print("请确保文件存在或检查文件路径")
+        return None
+    except Exception as e:
+        print(f"绘制饼图时发生错误: {e}")
+        print(f"错误类型: {type(e).__name__}")
+        traceback.print_exc()
+        return None
+
+
 def main():
     """主函数"""
     try:
@@ -142,6 +239,7 @@ def main():
         print(f"发生错误: {e}")
         import traceback
         traceback.print_exc()
+  
 
 if __name__ == "__main__":
-    main()
+    draw_govfund_investment_piechart()

@@ -1,0 +1,9 @@
+stages:
+  prepare: 
+    cmd:
+      - python growth_regress.py --myfunc regress
+    deps:
+      - govfund_filtered.xlsx
+      - invest.xlsx
+    outs:
+      - growth_panel.xlsx

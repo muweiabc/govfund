@@ -19,6 +19,8 @@ def read_and_merge_investment_data():
         "2019.xls",
         "2020.xls",
         "2021.xls",
+        "2022.xls",
+        "2023.xls",
     ]
     
     all_data = []
@@ -70,7 +72,7 @@ def read_and_merge_investment_data():
                 merged_df = merged_df.sort_values(by='数据来源文件', ascending=False)
             
             # 保存到invest.xlsx
-            output_filename = "invest.xlsx"
+            output_filename = "../invest.xlsx"
             merged_df.to_excel(output_filename, index=False, sheet_name='所有投资')
             
             print(f"\n数据已成功保存到 {output_filename}")
@@ -351,11 +353,11 @@ if __name__ == "__main__":
     read_and_merge_investment_data()
     # 添加treatment列
 
-    result = add_treatment_column()
+    # result = add_treatment_column()
     
     # 提取有专利公司的首次投资记录
     
-    result = extract_first_investment_for_patent_companies()
+    # result = extract_first_investment_for_patent_companies()
     
     # if result:
     #     print(f"\n=== 处理完成 ===")

@@ -6,6 +6,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 import statsmodels.api as sm
 import warnings
+from scipy.stats.mstats import winsorize
 warnings.filterwarnings('ignore')
 
 # 设置中文字体

@@ -1,8 +1,10 @@
+from cgitb import text
 from formulaic.transforms.patsy_compat import Treatment
 import pandas as pd
 import numpy as np
 import sys
 import argparse
+
 sys.path.append('.')
 from linearmodels import PanelOLS
 from statsmodels.iolib.summary2 import summary_col
@@ -42,18 +44,19 @@ def read_panel_data(input_file='patent_analysis/regression_panel_data.xlsx'):
     sheet_name = '面板数据'
     return pd.read_excel(input_file, sheet_name=sheet_name)
 
-def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
+def main_regress(input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
     """
     对全部投资进行回归：1依次添加解释变量做稳定性检验；2更改被解释变量，用所有解释变量，做4个回归
     """
     panel_df = read_panel_data(input_file)
     panel_df.set_index(['company', 'year'], inplace=True)
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
+
     control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
-    # control_vars = [TREATMENT_POST]
     
     describe_vars = control_vars + [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
    
-    
     province_cols = []
     for col in panel_df.columns:
         if col.startswith('省份'):
@@ -61,7 +64,144 @@ def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='p
     
     stage_cols = []
     for col in panel_df.columns:
-        if col.startswith('投资阶段'):
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+
+    y_patent = np.log(panel_df[PATENT_COUNT]+1)
+    y_citation = np.log(panel_df[CITATION_COUNT]+1)
+    y_invention = np.log(panel_df[INVENTION_COUNT]+1)
+    y_invention_citation = np.log(panel_df[INVENTION_CITATION]+1)
+    panel_df['ln_patent_count_plus_1'] = y_patent
+    panel_df['ln_citation_count_plus_1'] = y_citation
+    panel_df['ln_invention_count_plus_1'] = y_invention
+    panel_df['ln_invention_citation_plus_1'] = y_invention_citation
+    # describe_vars = describe_vars + ['ln_patent_count_plus_1','ln_citation_count_plus_1','ln_invention_count_plus_1','ln_invention_citation_plus_1']
+
+    # stas_x = panel_df[describe_vars].describe(percentiles=[]).T
+    
+    # stas_y_patent = y_patent.describe()
+    # stas_y_citation = y_citation.describe()
+    # stas_y_invention = y_invention.describe()
+    # stas_y_invention_citation = y_invention_citation.describe()
+
+    # ystats = pd.concat([stas_y_patent, stas_y_citation, stas_y_invention, stas_y_invention_citation], axis=1)
+    # ystats.columns = [PATENT_COUNT, CITATION_COUNT, INVENTION_COUNT, INVENTION_CITATION]
+    # ystats = ystats.T
+
+    # with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    #     stas_x.to_excel(writer, sheet_name='回归变量统计')
+        # ystats.to_excel(writer, sheet_name='被解释变量统计')   
+
+    # cols of regression_panel_data.xlsx:
+    # treatment	post	treatment_post	year_offset	patent_count  citation_count	invention_count
+    #	invention_citation	二产就业比例	GDP	城镇化率	固定资产投资
+    exog_cols_list = [
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP]+ province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST]+ province_cols+ stage_cols ,
+    ]
+    # exog_cols_list = [
+    #     [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]+stage_cols,
+    #     [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE]+stage_cols,
+    #     [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP]+stage_cols,
+    #     [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO]+stage_cols,
+    #     [TREATMENT,TREATMENT_POST]+ stage_cols ,
+    # ]
+
+    for yidx,y in enumerate([y_patent,y_citation,y_invention,y_invention_citation]):
+        results_list = []
+        result_all = []
+        for idx,exog_cols in enumerate(exog_cols_list):
+            result = regress(y,panel_df[exog_cols], output_file, PATENT_COUNT, entity_effects=False, time_effects=True) 
+            results_list.append(LinearmodelsResultsWrapper(result))
+            # if idx == 0:
+            #     result_all.append(LinearmodelsResultsWrapper(result))
+
+        # =========================================================================
+        # 4. 使用 summary_col 合并结果并格式化 (与之前相同)
+        # =========================================================================
+        model_names = [f'({i})' for i in range(1, 6)]
+
+        info_dict = {
+            'N': lambda x: f'{int(x.nobs)}',
+        }
+
+        regressor_order = [TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+
+        table = summary_col(
+            results=results_list,
+            model_names=model_names,
+            info_dict=info_dict,
+            float_format='%0.3f',
+            regressor_order=regressor_order,
+            stars=True,
+        )
+        table.title='逐步增加解释变量的稳健性回归结果'
+     
+        from utils import modify_html_main_regress
+        text = table.as_html()
+        with open(f'patent_analysis/html/main_regress_{yidx}.html', mode='w', encoding='utf-8') as f:
+            f.write(modify_html_main_regress(text) )
+            # f.write(text) 
+        
+    # X = panel_df[control_vars + stage_cols]
+    # entity_effects = False
+    # time_effects = True
+    # results_list = []
+    # r=regress(y_patent,X, output_file, PATENT_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_citation,X, output_file, CITATION_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_invention,X, output_file, INVENTION_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_invention_citation,X, output_file, INVENTION_CITATION, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+
+    # model_names = [f'({i})' for i in range(1, 5)]
+
+    # info_dict = {
+    #     'N': lambda x: f'{int(x.nobs)}',
+    # }
+
+    # regressor_order = control_vars #[TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+
+    # table = summary_col(
+    #     results=results_list,
+    #     model_names=model_names,
+    #     info_dict=info_dict,
+    #     float_format='%0.3f',
+    #     regressor_order=regressor_order,
+    #     stars=True,
+    # )
+    # table.title = '不同被解释变量的回归结果'
+
+    # with open('patent_analysis/tex/raw.tex', mode='a', encoding='utf-8') as f:
+    #     f.write(table.as_latex())
+
+def fin_tolerate_regress(input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
+    """
+    对全部投资进行回归：1依次添加解释变量做稳定性检验；2更改被解释变量，用所有解释变量，做4个回归
+    """
+    panel_df = read_panel_data(input_file)
+    panel_df.set_index(['company', 'year'], inplace=True)
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
+    panel_df['industry'] = panel_df['industry']*panel_df[TREATMENT_POST]
+
+    control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
+    
+    describe_vars = control_vars + [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
+   
+    province_cols = []
+    for col in panel_df.columns:
+        if col.startswith('省份'):
+            province_cols.append(col)
+    
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
             stage_cols.append(col)
 
     y_patent = np.log(panel_df[PATENT_COUNT]+1)
@@ -74,51 +214,148 @@ def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='p
     panel_df['ln_invention_citation_plus_1'] = y_invention_citation
     describe_vars = describe_vars + ['ln_patent_count_plus_1','ln_citation_count_plus_1','ln_invention_count_plus_1','ln_invention_citation_plus_1']
 
-    stas_x = panel_df[describe_vars].describe(percentiles=[]).T
-    
-    # stas_y_patent = y_patent.describe()
-    # stas_y_citation = y_citation.describe()
-    # stas_y_invention = y_invention.describe()
-    # stas_y_invention_citation = y_invention_citation.describe()
-
-    # ystats = pd.concat([stas_y_patent, stas_y_citation, stas_y_invention, stas_y_invention_citation], axis=1)
-    # ystats.columns = [PATENT_COUNT, CITATION_COUNT, INVENTION_COUNT, INVENTION_CITATION]
-    # ystats = ystats.T
-
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        stas_x.to_excel(writer, sheet_name='回归变量统计')
-        # ystats.to_excel(writer, sheet_name='被解释变量统计')   
-
-    results_list = []
-    result_all = []
     # cols of regression_panel_data.xlsx:
     # treatment	post	treatment_post	year_offset	patent_count  citation_count	invention_count
     #	invention_citation	二产就业比例	GDP	城镇化率	固定资产投资
+    INDUSTRY = 'industry'
     exog_cols_list = [
-        # ['treatment','treatment_post','二产就业比例','GDP','城镇化率','固定资产投资'] + province_cols + stage_cols,
-        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]+  stage_cols,
-        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE]+  stage_cols,
-        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP]+ stage_cols,
-        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO]+  stage_cols,
-        [TREATMENT,TREATMENT_POST]+  stage_cols ,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT,INDUSTRY]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,INDUSTRY]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,INDUSTRY]+ province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,INDUSTRY]+  province_cols+stage_cols,
+        [TREATMENT,TREATMENT_POST,INDUSTRY]+ province_cols+ stage_cols ,
     ]
-    for idx,exog_cols in enumerate(exog_cols_list):
-        result = regress(y_patent,panel_df[exog_cols], output_file, PATENT_COUNT, entity_effects=False, time_effects=True) 
-        results_list.append(LinearmodelsResultsWrapper(result))
-        if idx == 0:
-            result_all.append(LinearmodelsResultsWrapper(result))
 
-    # =========================================================================
-    # 4. 使用 summary_col 合并结果并格式化 (与之前相同)
-    # =========================================================================
+    for yidx,y in enumerate([y_patent,y_citation,y_invention,y_invention_citation]):
+        results_list = []
+        result_all = []
+        for idx,exog_cols in enumerate(exog_cols_list):
+            result = regress(y,panel_df[exog_cols], output_file, PATENT_COUNT, entity_effects=False, time_effects=True) 
+            results_list.append(LinearmodelsResultsWrapper(result))
+            # if idx == 0:
+            #     result_all.append(LinearmodelsResultsWrapper(result))
+
+        # =========================================================================
+        # 4. 使用 summary_col 合并结果并格式化 (与之前相同)
+        # =========================================================================
+        model_names = [f'({i})' for i in range(1, 6)]
+
+        info_dict = {
+            'N': lambda x: f'{int(x.nobs)}',
+        }
+
+        regressor_order = [TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+
+        table = summary_col(
+            results=results_list,
+            model_names=model_names,
+            info_dict=info_dict,
+            float_format='%0.3f',
+            regressor_order=regressor_order,
+            stars=True,
+        )
+        table.title='逐步增加解释变量的稳健性回归结果'
+     
+        from utils import modify_html_main_regress
+        text = table.as_html()
+        with open(f'patent_analysis/html/fin_tolerate_regress_{yidx}.html', mode='w', encoding='utf-8') as f:
+            f.write(modify_html_main_regress(text) )
+            # f.write(text) 
+        
+    # X = panel_df[control_vars + stage_cols]
+    # entity_effects = False
+    # time_effects = True
+    # results_list = []
+    # r=regress(y_patent,X, output_file, PATENT_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_citation,X, output_file, CITATION_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_invention,X, output_file, INVENTION_COUNT, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+    # r=regress(y_invention_citation,X, output_file, INVENTION_CITATION, entity_effects, time_effects) 
+    # results_list.append(LinearmodelsResultsWrapper(r))
+
+    # model_names = [f'({i})' for i in range(1, 5)]
+
+    # info_dict = {
+    #     'N': lambda x: f'{int(x.nobs)}',
+    # }
+
+    # regressor_order = control_vars #[TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+
+    # table = summary_col(
+    #     results=results_list,
+    #     model_names=model_names,
+    #     info_dict=info_dict,
+    #     float_format='%0.3f',
+    #     regressor_order=regressor_order,
+    #     stars=True,
+    # )
+    # table.title = '不同被解释变量的回归结果'
+
+    # with open('patent_analysis/tex/raw.tex', mode='a', encoding='utf-8') as f:
+    #     f.write(table.as_latex())
+
+
+def did_check_trend(input_file='patent_analysis/regression_panel_data.xlsx', output_file='patent_analysis/did_results.xlsx'):
+    """
+    对全部投资进行回归：1依次添加解释变量做稳定性检验；2更改被解释变量，用所有解释变量，做4个回归
+    """
+    panel_df = read_panel_data(input_file)
+    panel_df.set_index(['company', 'year'], inplace=True)
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
+    # panel_df['industry'] = panel_df['industry']*panel_df[TREATMENT_POST]
+
+    province_cols = []
+    for col in panel_df.columns:
+        if col.startswith('省份'):
+            province_cols.append(col)
+    
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+
+    y_patent = np.log(panel_df[PATENT_COUNT]+1)
+    y_citation = np.log(panel_df[CITATION_COUNT]+1)
+    y_invention = np.log(panel_df[INVENTION_COUNT]+1)
+    y_invention_citation = np.log(panel_df[INVENTION_CITATION]+1)
+    panel_df['ln_patent_count_plus_1'] = y_patent
+    panel_df['ln_citation_count_plus_1'] = y_citation
+    panel_df['ln_invention_count_plus_1'] = y_invention
+    panel_df['ln_invention_citation_plus_1'] = y_invention_citation
+
+
+    exog_cols_list = [
+   
+        [SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT,'before2','before1','after1','after2','after3','tbefore2','tbefore1','tafter2','tafter3']+stage_cols,
+        
+    #     # [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT, 'industry']+  province_cols+stage_cols,
+    #     # [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE]+  province_cols+stage_cols,
+    #     # [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP]+ province_cols+stage_cols,
+    #     # [TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO]+  province_cols+stage_cols,
+    #     # [TREATMENT,TREATMENT_POST]+ province_cols+ stage_cols ,
+    ]
+
+    results_list = []
+    for y in [y_patent,y_citation,y_invention,y_invention_citation]:
+        
+        for idx,exog_cols in enumerate(exog_cols_list):
+            result = regress(y,panel_df[exog_cols], output_file, PATENT_COUNT, entity_effects=False, time_effects=True) 
+            results_list.append(LinearmodelsResultsWrapper(result))
+           
+        # =========================================================================
+        # 4. 使用 summary_col 合并结果并格式化 (与之前相同)
+        # =========================================================================
     model_names = [f'({i})' for i in range(1, 6)]
 
     info_dict = {
         'N': lambda x: f'{int(x.nobs)}',
     }
 
-    regressor_order = [TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
-
+    regressor_order = [SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT,'before2','before1','after1','after2','after3','tbefore2','tbefore1','tafter2','tafter3']+stage_cols,
+        
     table = summary_col(
         results=results_list,
         model_names=model_names,
@@ -128,75 +365,41 @@ def main(input_file='patent_analysis/regression_panel_data.xlsx', output_file='p
         stars=True,
     )
     table.title='逐步增加解释变量的稳健性回归结果'
-    table_all = summary_col(
-        results=result_all,
-        model_names=model_names,
-        info_dict=info_dict,
-        float_format='%0.3f',
-        regressor_order=regressor_order,
-        stars=True,
-    )
-    table_all.title='主回归结果'
+    
+    from utils import modify_did_trend
+    text = table.as_html()
+    with open('patent_analysis/html/did_check_trend.html', mode='w', encoding='utf-8') as f:
+        # f.write(modify_did_trend(text))
+        f.write(text) 
 
-    with open('patent_analysis/tex/raw.tex', 'w', encoding='utf-8') as f:
-        f.write(table.as_latex() + '\\')
-        f.write(table_all.as_latex())
-
-    # control_vars = [TREATMENT_POST,'post',TREATMENT]
-        
-    X = panel_df[control_vars + stage_cols]
-    entity_effects = False
-    time_effects = True
-    results_list = []
-    r=regress(y_patent,X, output_file, PATENT_COUNT, entity_effects, time_effects) 
-    results_list.append(LinearmodelsResultsWrapper(r))
-    r=regress(y_citation,X, output_file, CITATION_COUNT, entity_effects, time_effects) 
-    results_list.append(LinearmodelsResultsWrapper(r))
-    r=regress(y_invention,X, output_file, INVENTION_COUNT, entity_effects, time_effects) 
-    results_list.append(LinearmodelsResultsWrapper(r))
-    r=regress(y_invention_citation,X, output_file, INVENTION_CITATION, entity_effects, time_effects) 
-    results_list.append(LinearmodelsResultsWrapper(r))
-
-    model_names = [f'({i})' for i in range(1, 5)]
-
-    info_dict = {
-        'N': lambda x: f'{int(x.nobs)}',
-    }
-
-    regressor_order = control_vars #[TREATMENT_POST, TREATMENT, SECONDARY_EMPLOYMENT_RATIO,LN_GDP,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
-
-    table = summary_col(
-        results=results_list,
-        model_names=model_names,
-        info_dict=info_dict,
-        float_format='%0.3f',
-        regressor_order=regressor_order,
-        stars=True,
-    )
-    table.title = '不同被解释变量的回归结果'
-
-    with open('patent_analysis/tex/raw.tex', mode='a', encoding='utf-8') as f:
-        f.write(table.as_latex())
-
+ 
 def stage_regress(input_file, output_file):
     """按投资时公司发展阶段分组回归
     """
     panel_df = read_panel_data(input_file)
     panel_df.set_index(['company', 'year'], inplace=True)
-    control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
         
     # province_cols = []
     # for col in panel_df.columns:
     #     if col.startswith('省份'):
-    #         control_vars.append(col)
     #         province_cols.append(col)
-
+    
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+    control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
+    
     STAGES = ['种子期','初创期','扩张期', '成熟期' ]
     ENDO_VARS = [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
     result_list = []
-    for endo_var in ENDO_VARS:
+    stage_size = []
+    for idx,endo_var in enumerate(ENDO_VARS):
         for stage in STAGES: 
             stage_df = panel_df[panel_df['stage'] == stage]
+            stage_size.append(len(stage_df))
             y = np.log(stage_df[endo_var]+1)
             x = stage_df[control_vars]
             result = regress(y,x,output_file=output_file, sheet_name=stage+endo_var, entity_effects=False, time_effects=True)
@@ -204,14 +407,14 @@ def stage_regress(input_file, output_file):
             # with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
             #     stas_x.to_excel(writer, sheet_name='回归变量统计')
     
-    model_names = [f'({i})' for i in range(1, len(STAGES)+1)]
+    model_names = STAGES
 
     info_dict = {
         'N': lambda x: f'{int(x.nobs)}',
     }
 
     regressor_order = [TREATMENT_POST, TREATMENT,LN_GDP, SECONDARY_EMPLOYMENT_RATIO,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
-
+    from utils import trim_stage_tex
     for i in range(0,4):
         table = summary_col(
             results=result_list[i*len(STAGES):(i+1)*len(STAGES)],
@@ -221,20 +424,159 @@ def stage_regress(input_file, output_file):
             regressor_order=regressor_order,
             stars=True,
         )
-        table.title = f'{ENDO_VARS[i]}作为被解释变量的回归结果'
-        with open('patent_analysis/tex/stage.tex', mode='a', encoding='utf-8') as f:
-            f.write(table.as_latex()+' \\newline'+'\n\n')
+        endo_var = ENDO_VARS[i].replace('_',' ')
+        table.title = f'{endo_var}作为被解释变量的回归结果'
+        
+        from utils import modify_stage_regress
+        text = table.as_html()
+        with open(f'patent_analysis/html/stage.html', mode='a', encoding='utf-8') as f:
+            f.write(modify_stage_regress(text) )
+
+def constraint_regress(input_file, output_file):
+    """按投资时公司发展阶段分组回归
+    """
+    panel_df = pd.read_excel('constraint_panel_data.xlsx')
+    panel_df.set_index(['company', 'year'], inplace=True)
+    panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
+    panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
+    DEPENDENCE = 'dependence'
+    panel_df[DEPENDENCE] = panel_df['group'].apply(lambda x:0 if x =='a' else 1)*panel_df[TREATMENT_POST]
+        
+    # province_cols = []
+    # for col in panel_df.columns:
+    #     if col.startswith('省份'):
+    #         province_cols.append(col)
+    
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+    
+    control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT,DEPENDENCE]+stage_cols
+    
+    # GROUPS = ['a','b']
+    ENDO_VARS = [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
+    result_list = []
+    for idx,endo_var in enumerate(ENDO_VARS):
+        
+            # stage_df = panel_df[panel_df['group'] == group]
+        y = np.log(panel_df[endo_var]+1)
+        x = panel_df[control_vars]
+        result = regress(y,x,output_file=output_file, sheet_name=endo_var, entity_effects=False, time_effects=True)
+        result_list.append(LinearmodelsResultsWrapper(result))
+            # with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            #     stas_x.to_excel(writer, sheet_name='回归变量统计')
+    
+    model_names = [1,2,3,4]
+
+    info_dict = {
+        'N': lambda x: f'{int(x.nobs)}',
+    }
+
+    regressor_order = [DEPENDENCE,TREATMENT_POST, TREATMENT,LN_GDP, SECONDARY_EMPLOYMENT_RATIO,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+    from utils import trim_stage_tex
+    
+    table = summary_col(
+        results=result_list,
+        model_names=model_names,
+        info_dict=info_dict,
+        float_format='%0.3f',
+        regressor_order=regressor_order,
+        stars=True,
+    )
+    # endo_var = ENDO_VARS[i].replace('_',' ')
+    table.title = f'{endo_var}作为被解释变量的回归结果'
+    
+    # from utils import modify_stage_regress
+    text = table.as_html()
+    with open(f'patent_analysis/html/constraint.html', mode='w', encoding='utf-8') as f:
+        f.write(text )
+
+def state_owned_regress(input_file, output_file):
+    """按投资时公司发展阶段分组回归
+    """
+    panel_df = pd.read_csv(input_file)
+    panel_df.set_index(['company', 'year'], inplace=True)
+
+    for idx,row in panel_df.iterrows():
+        if row['国资背景'] == '是':
+            panel_df.at[idx,'国资效应'] = row[TREATMENT_POST]
+        else:
+            panel_df.at[idx,'国资效应'] = 0
+    # control_vars = ['国资效应',TREATMENT_POST,TREATMENT,LN_GDP,SECONDARY_EMPLOYMENT_RATIO,URBAN_RATE,LN_FIXED_INVESTMENT]
+        
+        
+    province_cols = []
+    for col in panel_df.columns:
+        if col.startswith('省份'):
+            province_cols.append(col)
+    
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+    
+    exog_cols_list = [
+        ['国资效应',TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]+  province_cols+stage_cols,
+        ['国资效应',TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP,URBAN_RATE]+  province_cols+stage_cols,
+        ['国资效应',TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO,LN_GDP]+ province_cols+stage_cols,
+        ['国资效应',TREATMENT,TREATMENT_POST,SECONDARY_EMPLOYMENT_RATIO]+  province_cols+stage_cols,
+        ['国资效应',TREATMENT,TREATMENT_POST]+ province_cols+ stage_cols ,
+    ]
+    ENDO_VARS = [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
+    file_path = 'patent_analysis/html/state_owned.html'
+    with open(file_path, 'w') as f:
+        pass
+
+    for endo_var in ENDO_VARS:
+        result_list = []
+        for idx,exog_cols in enumerate(exog_cols_list):
+            x = panel_df[exog_cols]
+            y = np.log(panel_df[endo_var]+1)
+            result = regress(y,x,output_file=output_file, sheet_name=f'国资_{endo_var}_{idx}', entity_effects=False, time_effects=True)
+            result_list.append(LinearmodelsResultsWrapper(result))
+    
+        model_names = [f'({i})' for i in range(1, 6)]
+
+        info_dict = {
+            'N': lambda x: f'{int(x.nobs)}',
+        }
+
+        regressor_order = exog_cols_list[0]
+
+    
+        table = summary_col(
+            results=result_list,
+            model_names=model_names,
+            info_dict=info_dict,
+            float_format='%0.3f',
+            regressor_order=regressor_order,
+            stars=True,
+        )
+        # table.title = f'{endo_var}作为被解释变量的国资效应回归'
+        # table.add_title = f'{endo_var}作为被解释变量的国资效应回归'
+        text = table.as_html()
+        from utils import modify_gov_html
+        
+        with open(file_path, mode='a', encoding='utf-8') as f:
+            f.write(modify_gov_html(text, f'{endo_var}作为被解释变量的国资效应回归'))
+
 
 def same_region_regress(input_file, output_file):
     """
     按基金和公司省份是否相同分组回归,图表输出到region_regression.tex
     """
-    panel_df = read_panel_data(input_file)
+    panel_df = pd.read_excel(input_file, sheet_name='面板数据')
     panel_df.set_index(['company', 'year'], inplace=True)
     panel_df[LN_GDP] = np.log(panel_df['GDP']+1)
     panel_df[LN_FIXED_INVESTMENT] = np.log(panel_df['固定资产投资']+1)
     control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]
     
+    province_cols = []
+    for col in panel_df.columns:
+        if col.startswith('省份'):
+            province_cols.append(col)
+
     stage_cols = []
     for col in panel_df.columns:
         if col.startswith('投资阶段'):
@@ -249,7 +591,7 @@ def same_region_regress(input_file, output_file):
             same_location_df = panel_df
             same_location_df = panel_df[panel_df['same_location'] == same_location]
             y = np.log(same_location_df[endo_var]+1)
-            x = same_location_df[control_vars + stage_cols]
+            x = same_location_df[control_vars + stage_cols ]
             
             result = regress(y,x,output_file=output_file, sheet_name=str(same_location), entity_effects=False, time_effects=True)
             result_list.append(LinearmodelsResultsWrapper(result))
@@ -271,8 +613,11 @@ def same_region_regress(input_file, output_file):
             stars=True
         )
         table.title = f'是否同区域投资对企业{ENDO_VARS_NAME[i]}的影响'
-        with open('patent_analysis/tex/region_regression.tex', mode='a', encoding='utf-8') as f:
-            f.write('\n\n' + table.as_latex()+' \\newline'+'\n\n')
+        text = table.as_html()
+        from utils import modify_same_region
+        
+        with open('patent_analysis/html/same_region.html', mode='a', encoding='utf-8') as f:
+            f.write(modify_same_region(text))
 
 def region_regress(input_file,output_file):
     panel_df = read_panel_data(input_file)
@@ -282,26 +627,38 @@ def region_regress(input_file,output_file):
     control_vars = [TREATMENT,TREATMENT_POST,LN_GDP,URBAN_RATE,LN_FIXED_INVESTMENT]
     # control_vars = [TREATMENT_POST,TREATMENT]
     REGION_COLS = ['region_东部','region_中部','region_西部']
-    panel_df['delta_东部'] = panel_df[REGION_COLS[0]]*panel_df[TREATMENT_POST]
-    panel_df['delta_中部'] = panel_df[REGION_COLS[1]]*panel_df[TREATMENT_POST]
-    panel_df['delta_西部'] = panel_df[REGION_COLS[2]]*panel_df[TREATMENT_POST]
-    X = panel_df[control_vars + REGION_COLS + ['delta_东部','delta_中部','delta_西部']]
+    REGIONS = ['东部','中部','西部','东北']
+    # panel_df['delta_东部'] = panel_df[REGION_COLS[0]]*panel_df[TREATMENT_POST]
+    # panel_df['delta_中部'] = panel_df[REGION_COLS[1]]*panel_df[TREATMENT_POST]
+    # panel_df['delta_西部'] = panel_df[REGION_COLS[2]]*panel_df[TREATMENT_POST]
+    # X = panel_df[control_vars + REGION_COLS + ['delta_东部','delta_中部','delta_西部']]
     ENDO_VARS = [PATENT_COUNT,CITATION_COUNT,INVENTION_COUNT,INVENTION_CITATION]
     y = np.log(panel_df[INVENTION_COUNT]+1)
 
-    for endo_var in ENDO_VARS:
+    province_cols = []
+    for col in panel_df.columns:
+        if col.startswith('省份'):
+            province_cols.append(col)
+
+    stage_cols = []
+    for col in panel_df.columns:
+        if col.startswith('stage_'):
+            stage_cols.append(col)
+    control_vars = control_vars + stage_cols
+
+    for idx,endo_var in enumerate(ENDO_VARS):
         result_list = []
-        for region in REGION_COLS:
-            df_region = panel_df[panel_df[region] == 1]
+        for region in REGIONS:
+            df_region = panel_df[panel_df['region'] == region]
             x = df_region[control_vars ]
             y = np.log(df_region[endo_var]+1)
             result = regress(y,x,output_file=output_file, sheet_name=region, entity_effects=False, time_effects=True)
             result_list.append(LinearmodelsResultsWrapper(result))
-        df_region = panel_df[(panel_df[REGION_COLS[0]] == 0) & (panel_df[REGION_COLS[1]] == 0) & (panel_df[REGION_COLS[2]] == 0)]
-        x = df_region[control_vars ]
-        y = np.log(df_region[endo_var]+1)
-        result = regress(y,x,output_file=output_file, sheet_name='region', entity_effects=False, time_effects=True)
-        result_list.append(LinearmodelsResultsWrapper(result))
+        # df_region = panel_df[(panel_df[REGION_COLS[0]] == 0) & (panel_df[REGION_COLS[1]] == 0) & (panel_df[REGION_COLS[2]] == 0)]
+        # x = df_region[control_vars ]
+        # y = np.log(df_region[endo_var]+1)
+        # result = regress(y,x,output_file=output_file, sheet_name='region', entity_effects=False, time_effects=True)
+        # result_list.append(LinearmodelsResultsWrapper(result))
 
         model_names = ['东部','中部','西部','东北']
 
@@ -309,7 +666,7 @@ def region_regress(input_file,output_file):
             'N': lambda x: f'{int(x.nobs)}',
         }
 
-        regressor_order = [TREATMENT_POST, TREATMENT,LN_GDP, SECONDARY_EMPLOYMENT_RATIO,  URBAN_RATE, LN_FIXED_INVESTMENT,'const']
+        regressor_order = [TREATMENT_POST, TREATMENT,LN_GDP, SECONDARY_EMPLOYMENT_RATIO,  URBAN_RATE, LN_FIXED_INVESTMENT] + stage_cols
 
         
         table = summary_col(
@@ -320,9 +677,12 @@ def region_regress(input_file,output_file):
             regressor_order=regressor_order,
             stars=True
         )
-        table.title = f'不同区域政府引导基金对{endo_var}的影响'
-        with open('patent_analysis/tex/region_regression.tex', mode='a', encoding='utf-8') as f:
-                f.write('\n\n' + table.as_latex()+' \\newline'+'\n\n')
+        ENDO_VARS_NAME = ['专利数','引用数','发明数','发明引用数']
+        table.title = f'不同区域政府引导基金对{ENDO_VARS_NAME[idx]}的影响'
+        text = table.as_html()
+        from utils import modify_region_html
+        with open('patent_analysis/html/region_regression.html', mode='a', encoding='utf-8') as f:
+                f.write(modify_region_html(text))
     # result = regress(y,X,output_file=output_file, sheet_name='region', entity_effects=False, time_effects=True)
     # print(result)
     print(result_list)
@@ -392,7 +752,7 @@ def regress(y, X, output_file,sheet_name, entity_effects=False, time_effects=Tru
     # with open(f'{output_file}_{sheet_name}.csv', "w", newline="") as csvfile:
     # csvfile.write(results.summary.as_csv())
     # df = pd.DataFrame(pd.read_csv("output.csv"))
-    with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
         results_summary = pd.DataFrame({
             '变量': results.params.index,
             '系数': results.params.values,
@@ -415,10 +775,13 @@ if __name__ == "__main__":
                        default='patent_analysis/did_results.xlsx'
                     )
     args = parser.parse_args()
-    # main(input_file=args.input_file, output_file=args.output_file)
+    # main_regress(input_file=args.input_file, output_file=args.output_file)
+    # fin_tolerate_regress(input_file=args.input_file, output_file=args.output_file)
+    # did_check_trend(input_file=args.input_file, output_file=args.output_file)
     # main_lagged(province_dummy=True, stage_dummy=True, output_file= 'patent_analysis/did_results_lagged.xlsx')
     # stage_regress(args.input_file,'patent_analysis/stage.xlsx')
+    constraint_regress(args.input_file,'patent_analysis/stage.xlsx')
     # same_region_regress('patent_analysis/regression_data_location.xlsx','patent_analysis/did_same_region.xlsx')
-    region_regress(input_file='patent_analysis/regression_panel_data.xlsx',output_file='patent_analysis/did_region.xlsx')
-# 
+    # region_regress(input_file='patent_analysis/regression_panel_data.xlsx',output_file='patent_analysis/did_region.xlsx')
+    # state_owned_regress(input_file='panel_data_govfund.csv',output_file='patent_analysis/did_state_owned.xlsx')
 

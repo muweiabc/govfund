@@ -67,6 +67,11 @@ def create_regression_data(input_file='invest.xlsx',
         treatment = row['treatment']
         province = row['省份']
         investment_stage = row['投资阶段']
+        ipo = 0 if not row['上市交易所'] or row['上市交易所'] == '--' else 1
+        industries = row['行业(国标)'].split('|')
+        industry = 1 if '医药制造业' in industries or '通信设备、计算机及其他电子设备制造业' in industries  else 0
+        
+            
         
         # 创建前3年和后3年的数据
         for year_offset in [-3, -2, -1, 1, 2, 3]:  
@@ -88,8 +93,27 @@ def create_regression_data(input_file='invest.xlsx',
                     PROVINCE: province,
                     STAGE: investment_stage,
                     'year_offset': year_offset,
-                    'same_location':row['same_location']
+                    # 'same_location':row['same_location'],
+                    'ipo':ipo,
+                    'industry':industry,
+                    'group':row['group'],
+
+                    'before3':1 if year_offset == -3 else 0,
+                    'before2':1 if year_offset == -2 else 0,
+                    'before1':1 if year_offset == -1 else 0,
+                    'after1':1 if year_offset == 1 else 0,
+                    'after2':1 if year_offset == 2 else 0,
+                    'after3':1 if year_offset == 3 else 0,
+
+
                 }
+
+                panel_record['tbefore3'] = panel_record['before3']*treatment
+                panel_record['tbefore2'] = panel_record['before2']*treatment
+                panel_record['tbefore1'] = panel_record['before1']*treatment
+                panel_record['tafter1'] = panel_record['after1']*treatment
+                panel_record['tafter2'] = panel_record['after2']*treatment
+                panel_record['tafter3'] = panel_record['after3']*treatment
                 
                 panel_data.append(panel_record)
         
@@ -109,36 +133,36 @@ def create_regression_data(input_file='invest.xlsx',
     print(f"   - 年份范围: {panel_df['year'].min()} - {panel_df['year'].max()}")
    
     # 按treatment和post分组统计
-    group_stats = panel_df.groupby(['treatment', 'post']).agg('count').reset_index()
-    print(f"\n6. 分组统计:")
-    print(group_stats)
+    # group_stats = panel_df.groupby(['treatment', 'post']).agg('count').reset_index()
+    # print(f"\n6. 分组统计:")
+    # print(group_stats)
     
-    # 按省份统计
-    province_stats = panel_df.groupby(PROVINCE).size().sort_values(ascending=False).reset_index()
-    print(f"\n7. 省份统计 (前10):")
-    print(province_stats.head(10))
+    # # 按省份统计
+    # province_stats = panel_df.groupby(PROVINCE).size().sort_values(ascending=False).reset_index()
+    # print(f"\n7. 省份统计 (前10):")
+    # print(province_stats.head(10))
     
-    # 按投资阶段统计
-    stage_stats = panel_df.groupby(STAGE).size().sort_values(ascending=False).reset_index()
-    print(f"\n8. 投资阶段统计:")
-    print(stage_stats)
+    # # 按投资阶段统计
+    # stage_stats = panel_df.groupby(STAGE).size().sort_values(ascending=False).reset_index()
+    # print(f"\n8. 投资阶段统计:")
+    # print(stage_stats)
     
-    year_stats = panel_df.groupby('year').size().reset_index()
-    print(f"\n9. 年份统计:")
-    print(year_stats)
+    # year_stats = panel_df.groupby('year').size().reset_index()
+    # print(f"\n9. 年份统计:")
+    # print(year_stats)
 
     # 6. 保存数据
     print("9. 保存数据...")
     
-    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-        # 保存面板数据
-        panel_df.to_excel(writer, sheet_name='面板数据', index=False)
+    # with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+    #     # 保存面板数据
+    #     panel_df.to_excel(writer, sheet_name='面板数据', index=False)
         
         # 保存统计信息
-        group_stats.to_excel(writer, sheet_name='分组统计', index=False)
-        province_stats.to_excel(writer, sheet_name='省份统计', index=False)
-        stage_stats.to_excel(writer, sheet_name='投资阶段统计', index=False)
-        year_stats.to_excel(writer, sheet_name='年份统计', index=False)
+        # group_stats.to_excel(writer, sheet_name='分组统计', index=False)
+        # province_stats.to_excel(writer, sheet_name='省份统计', index=False)
+        # stage_stats.to_excel(writer, sheet_name='投资阶段统计', index=False)
+        # year_stats.to_excel(writer, sheet_name='年份统计', index=False)
     
     print(f"   - 数据已保存到: {output_file}")
     
@@ -162,7 +186,7 @@ def read_panel_data()->pd.DataFrame:
 
 def write_panel_data(panel_df, output_file,sheet_name = '面板数据'):
     
-    with pd.ExcelWriter(output_file, engine='openpyxl',mode='a',if_sheet_exists='replace') as writer:
+    with pd.ExcelWriter(output_file, engine='openpyxl',mode='w') as writer:
         panel_df.to_excel(writer, sheet_name=sheet_name, index=False)
 
 def add_patent(df)->pd.DataFrame:
@@ -285,7 +309,7 @@ def add_region(df):
     WEST = ['内蒙古','广西','重庆','四川','贵州','云南','西藏','陕西','甘肃','青海','宁夏','新疆']
     NORTHEAST = ['辽宁','吉林','黑龙江']
     def _add_region(row):
-        province = row['原省份']
+        province = row['省份']
         if province.endswith('省') or province.endswith('市'):
             province = province[:-1]
         if province in EAST:
@@ -307,44 +331,47 @@ def _generate_dummy_variables(panel_df):
     # 使用pd.get_dummies创建省份虚拟变量
     # panel_dummies = pd.get_dummies(panel_df, columns=[PROVINCE,STAGE,REGION], prefix=[PROVINCE,STAGE,REGION], drop_first=True, dtype=int)
     # panel_dummies['原省份'] = panel_df[PROVINCE]
-    panel_dummies = pd.get_dummies(panel_df, columns=[REGION], prefix=[REGION], drop_first=True, dtype=int)
-    
+    # panel_dummies = pd.get_dummies(panel_df, columns=[REGION], prefix=[REGION], drop_first=True, dtype=int)
+    panel_df['stage_初创'] = panel_df['stage'] == '初创期'
+    panel_df['stage_扩张'] = panel_df['stage'] == '扩张期'
+    panel_df['stage_成熟'] = panel_df['stage'] == '成熟期'
     print("   - 创建虚拟变量完成 ")
-    return panel_dummies
+    return panel_df
 
 def main(args):
     # 创建面板数据
-    # panel_df = create_regression_data(
-    #     input_file=args.input_file,
-    #     sheet_name=args.sheet_name,
-    #     output_file=args.output_file
-    # )
-    panel_df = read_panel_data()
-    # panel_df = add_gdp(panel_df)
-    # panel_df = add_patent(panel_df)
-    # panel_df = add_urban_col(panel_df)
-    # panel_df = add_fixed_invest_col(panel_df)
-    # panel_df = add_employment_col(panel_df)
-    # panel_df = add_stage(panel_df)
+    panel_df = create_regression_data(
+        input_file=args.input_file,
+        sheet_name=args.sheet_name,
+        output_file=args.output_file
+    )
+    # panel_df = read_panel_data()
+    panel_df = add_gdp(panel_df)
+    panel_df = add_patent(panel_df)
+    panel_df = add_urban_col(panel_df)
+    panel_df = add_fixed_invest_col(panel_df)
+    panel_df = add_employment_col(panel_df)
+    panel_df = add_stage(panel_df)
     panel_df = add_region(panel_df)
-    print(panel_df.head(5))
-    print(panel_df.columns)
+    # print(panel_df.head(5))
+    # print(panel_df.columns)
     panel_df = _generate_dummy_variables(panel_df)
     
-    write_panel_data(panel_df, args.output_file,sheet_name = '面板数据1')
+    write_panel_data(panel_df, args.output_file,sheet_name = '面板数据')
     
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='创建回归面板数据')
     parser.add_argument('--input_file', 
-                       default='invest.xlsx',
+                       default='invest_industry.xlsx',
                        help='投资数据文件路径')
     parser.add_argument('--sheet_name', 
                     #    default='有专利公司首次投资',
-                       default='location',
+                       default='行业分组',
+                    #    default='location',
                        help='工作表名称')
     parser.add_argument('--output_file', 
-                       default='patent_analysis/regression_panel_data.xlsx',
+                       default='constraint_panel_data.xlsx',
                     #    default='patent_analysis/regression_data_location.xlsx',
                        help='输出文件路径')
     parser.add_argument('--analyze', 

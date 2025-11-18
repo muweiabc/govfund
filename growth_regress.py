@@ -1,3 +1,4 @@
+from argparse import ArgumentParser
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -7,6 +8,10 @@ import os
 import traceback
 import warnings
 warnings.filterwarnings('ignore')
+
+PROVINCE = '省份'
+YEAR = '年份'
+EMPLOYMENT = '就业人员'
 
 def check_required_files():
     """检查必要的文件是否存在"""
@@ -168,6 +173,7 @@ def read_fund_data():
 
 def read_employment_data():
     """读取就业人口数据文件"""
+    
     try:
         print("\n正在读取就业人口数据文件...")
         df = pd.read_excel('就业人口.xlsx')
@@ -176,7 +182,7 @@ def read_employment_data():
         print(f"  列名: {list(df.columns)}")
         
         # 检查必要的列
-        required_columns = ['年度标识', '省份名称', '就业人员']
+        required_columns = [YEAR, PROVINCE, EMPLOYMENT]
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             print(f"✗ 错误: 就业人口文件缺少必要的列: {missing_columns}")
@@ -184,17 +190,17 @@ def read_employment_data():
             return None
         
         # 过滤掉全国数据，只保留省份数据
-        df = df[df['省份名称'] != '中国']
+        df = df[df[PROVINCE] != '中国']
         
         # 检查数据类型
-        print(f"  年度标识列数据类型: {df['年度标识'].dtype}")
-        print(f"  省份名称列数据类型: {df['省份名称'].dtype}")
-        print(f"  就业人员列数据类型: {df['就业人员'].dtype}")
+        print(f"  年度标识列数据类型: {df[YEAR].dtype}")
+        print(f"  省份名称列数据类型: {df[PROVINCE].dtype}")
+        print(f"  就业人员列数据类型: {df[EMPLOYMENT].dtype}")
         
         # 检查数据范围
-        print(f"  年份范围: {df['年度标识'].min()} - {df['年度标识'].max()}")
-        print(f"  省份数量: {df['省份名称'].nunique()}")
-        print(f"  就业人员范围: {df['就业人员'].min():.2f} - {df['就业人员'].max():.2f}")
+        print(f"  年份范围: {df[YEAR].min()} - {df[YEAR].max()}")
+        print(f"  省份数量: {df[PROVINCE].nunique()}")
+        print(f"  就业人员范围: {df[EMPLOYMENT].min():.2f} - {df[EMPLOYMENT].max():.2f}")
         
         return df
         
@@ -215,7 +221,7 @@ def read_investment_detail_data():
     """读取省份年份投资详情数据文件"""
     try:
         print("\n正在读取省份年份投资详情数据...")
-        df = pd.read_excel('govfund_analysis_results.xlsx', sheet_name='省份年份投资详情')
+        df = pd.read_csv('省份年份投资详情.csv')
         print(f"✓ 成功读取投资详情数据")
         print(f"  数据形状: {df.shape}")
         print(f"  列名: {list(df.columns)}")
@@ -325,8 +331,8 @@ def regress():
         y = []
         x = []
         panel_data = []
-        matched_count = 0
-        total_count = 0
+        matched_count = 0 #数据合格非空的行数
+        total_count = 0 # 2008-2023总行数
         
         for idx, row in gdp_df.iterrows():
             try:
@@ -371,12 +377,22 @@ def regress():
         print(f"  匹配记录数: {matched_count}")
         print(f"  有效样本数: {len(y)}")
         
-        panel_df = pd.DataFrame(panel_data)
+
+        df = pd.DataFrame(panel_data)
+        from utils import winsorize_df
+        panel_df = winsorize_df(df)
+
         panel_df.set_index(['province', 'year'], inplace=True)
         # 创建数据框
+        INVEST_COUNT = '投资笔数'
+        URBAN_RATE = '城镇化率'
+        INVESTMENT = '固定资产投资'
+        EMPLOYMENT = '就业人员'
+        PGDP = '人均GDP'
         try:
-            x_df = panel_df[['投资笔数','城镇化率','固定资产投资','就业人员']]
-            y_df = panel_df['人均GDP']
+            x_df = pd.concat([np.log(panel_df[INVEST_COUNT]+1),panel_df[URBAN_RATE],np.log(panel_df[INVESTMENT]),np.log(panel_df[EMPLOYMENT])],axis=1)
+            # x_df = panel_df[['投资笔数','城镇化率','固定资产投资','就业人员']]
+            y_df = np.log(panel_df[PGDP])
             
             print(f"\n回归数据准备完成:")
             print(f"  自变量X形状: {x_df.shape}")
@@ -413,7 +429,7 @@ def regress():
             # 添加常数项
             
             
-            model = PanelOLS(y_df, x_df, entity_effects=False, time_effects=True)
+            model = PanelOLS(y_df, x_df, entity_effects=True, time_effects=True)
     
             results = model.fit()
             
@@ -510,14 +526,15 @@ def get_investment(province, year, investment_df, investment_col):
         # 转换省份名称格式
         
         # 在投资数据中查找匹配
-        for idx, row in investment_df.iterrows():
-            # 检查省份名称是否匹配（支持多种格式）
-            if (province == row['地区'] and year == row['年份']):
-                return row[investment_col]
+        return investment_df.loc[year,province][investment_col]
+        # for idx, row in investment_df.iterrows():
+        #     # 检查省份名称是否匹配（支持多种格式）
+        #     if (province == row['地区'] and year == row['年份']):
+        #         return row[investment_col]
         
-        # 如果没有找到匹配的数据
-        print(f"  警告: 未找到 {province} 在 {year} 年的投资数据")
-        return 0  # 返回0而不是None，避免后续错误
+        # # 如果没有找到匹配的数据
+        # print(f"  警告: 未找到 {province} 在 {year} 年的投资数据")
+        # return 0  # 返回0而不是None，避免后续错误
         
     except Exception as e:
         print(f"  错误: 在查找投资数据时发生异常: {e}")
@@ -529,8 +546,8 @@ def get_employment(province, year, employment_df):
         # 在就业人口数据中查找匹配
         for idx, row in employment_df.iterrows():
             # 检查省份名称和年份是否匹配
-            if (province == row['省份名称'] and year == row['年度标识']):
-                return row['就业人员']
+            if (province == row[PROVINCE] and year == row[YEAR]):
+                return row[EMPLOYMENT]
         
         # 如果没有找到匹配的数据
         print(f"  警告: 未找到 {province} 在 {year} 年的就业人员数据")
@@ -557,16 +574,16 @@ def get_investment_count(province, year, investment_detail_df):
         print(f"  错误: 在查找投资笔数数据时发生异常: {e}")
         return 0
 
-if __name__ == "__main__":
-    try:
+
+def main():
+    args = ArgumentParser()
+    args.add_argument('--myfunc', help='函数名')
+    args = args.parse_args()
+    if args.myfunc == 'regress':
         regress()
-    except KeyboardInterrupt:
-        print("\n用户中断程序")
-    except Exception as e:
-        print(f"\n主程序执行过程中发生错误: {e}")
-        print(f"错误类型: {type(e).__name__}")
-        print("详细错误信息:")
-        traceback.print_exc()
+
+if __name__ == "__main__":
+    regress()
 
     # df = read_urban()
     # print(df.loc['北京',2009])

@@ -2,3 +2,7 @@ data/
 .*
 _*
 ~*
+!.dvc
+/invest_w_index.csv
+/govfund_w_index.csv
+/invest_by_govfund.csv

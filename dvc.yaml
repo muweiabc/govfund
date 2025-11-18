@@ -1,0 +1,35 @@
+stages:
+  prepare: 
+    cmd:
+      - python filter_govfund_investments.py --myfunc add_index_to_df
+    deps:
+      - govfund_filtered.xlsx
+      - invest.xlsx
+    outs:
+      - invest_w_index.csv
+      - govfund_w_index.csv
+  match:
+    cmd:
+      - python filter_govfund_investments.py --myfunc get_govfund_investments
+    deps:
+      - invest_w_index.csv
+      - govfund_w_index.csv
+    outs:
+      - invest_by_govfund.csv
+  filter_regression_data: #从已有面板数据中筛选出政府投资基金投资事件
+    cmd:
+      - python filter_govfund_investments.py --myfunc filter_regression_data
+    deps:
+      - regression_panel_data.xlsx
+      - invest_by_govfund.csv
+    outs:
+      - regression_panel_data.csv
+  graph:
+    cmd:
+      - python patent_analysis/analyze_fund.py --myfunc fund_time_and_spatial
+    deps:
+      - govfund_filtered.xlsx
+    outs:
+      - patent_analysis/graph/fund_distribution.png
+  #train: ... # stage 2 definition
+  #evaluate: ... # stage 3 definition

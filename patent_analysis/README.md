@@ -12,7 +12,12 @@
 
 ### patent_analysis/create_regression_data.py 读取`invest.xlsx`,提取投资年份，从 `company_patent_yearly.xlsx`获得投资前后三年的专利数，输出为`regress_panel_data.xlsx` （所有面板数据)和 `regression_data_location`(有投资机构属地的面板数据)
 
-### regress.py 读取`regress_panel_data`，生成面板数据和treatment_post，调用panelols进行回归，可配置时间固定效应和个体固定效应
+### regress.py 读取`regression_panel_data`，生成面板数据和treatment_post，调用panelols进行回归，可配置时间固定效应和个体固定效应。做多个回归，地域、阶段、是否国有
+
+### invest_by_govfund.csv 由政府投资基金投资的事件
+
+### govfund_w_index.csv 政府投资基金列表，2406个
+### invest_w_index.csv invest.xlsx中的所有投资列表，16726
 
 数据范围：
 就业人口：2000-2023
@@ -22,3 +27,5 @@
 分省固定资产投资 2003-2023
 各产业从业人数 1952-2003
 gdp:1952-2024
+
+

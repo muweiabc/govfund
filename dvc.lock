@@ -1,0 +1,40 @@
+schema: '2.0'
+stages:
+  prepare:
+    cmd:
+    - python filter_govfund_investments.py --myfunc add_index_to_df
+    deps:
+    - path: govfund_filtered.xlsx
+      hash: md5
+      md5: a5ed2d9d19965136d65cfa7946b539a0
+      size: 677474
+    - path: invest.xlsx
+      hash: md5
+      md5: 6126d4dc6a3c252e52c635bd7e98181d
+      size: 9041009
+    outs:
+    - path: govfund_w_index.csv
+      hash: md5
+      md5: efaa5dbbd13c4fc11e23aa120d191700
+      size: 816554
+    - path: invest_w_index.csv
+      hash: md5
+      md5: e6b665592f4d5e26dc33eadc2fc8fcdf
+      size: 12097385
+  match:
+    cmd:
+    - python filter_govfund_investments.py --myfunc get_govfund_investments
+    deps:
+    - path: govfund_w_index.csv
+      hash: md5
+      md5: efaa5dbbd13c4fc11e23aa120d191700
+      size: 816554
+    - path: invest_w_index.csv
+      hash: md5
+      md5: e6b665592f4d5e26dc33eadc2fc8fcdf
+      size: 12097385
+    outs:
+    - path: invest_by_govfund.csv
+      hash: md5
+      md5: 10bc945739b473f9e330531b554f8bb4
+      size: 3118467

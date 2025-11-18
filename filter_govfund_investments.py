@@ -1,6 +1,7 @@
 import pandas as pd
 import os
 import warnings
+import argparse
 warnings.filterwarnings('ignore')
 
 def filter_govfund_investments():
@@ -259,51 +260,80 @@ def analyze_investments_by_province_year():
         traceback.print_exc()
         return False
 
+def get_govfund_investments():
+    """获取政府投资基金投资数据"""
+    invest_df = pd.read_csv('invest_w_index.csv',index_col=0)
+    govfund_df = pd.read_csv('govfund_w_index.csv',index_col=0)
+    invest_by_govfund = []
+
+    fundname_to_fundrow = {}
+    for idx, row in govfund_df.iterrows():
+        fundname_to_fundrow[row['基金简称']] = row
+
+    for idx, row in invest_df.iterrows():
+        fund_name = row['基金名称']
+        if fund_name in fundname_to_fundrow:
+            fundrow = fundname_to_fundrow[fund_name]
+            row['匹配的政府投资基金index'] = fundrow.name
+            row['国资背景'] = fundrow['管理机构是否国资']
+            
+            invest_by_govfund.append(row)
+            
+        # for jdx, row_govfund in govfund_df.iterrows():
+        #     if  fund_name.strip() == row_govfund['基金简称'].strip():
+        #         row['匹配的政府投资基金index'] = row_govfund.name
+        #         row['国资背景'] = row_govfund['管理机构是否国资']
+        #         matched = True
+        #         invest_filtered.append(row)
+        #         break
+    invest_filtered_df = pd.DataFrame(invest_by_govfund)      
+    invest_filtered_df.to_csv('invest_by_govfund.csv', index=False)
+    return invest_filtered_df
+
+def add_index_to_df():
+    invest_df = pd.read_excel('invest.xlsx', sheet_name='所有投资')
+    # invest_df['index'] = range(1, len(invest_df) + 1)
+    invest_df.to_csv('invest_w_index.csv', index=True)
+    govfund_df = pd.read_excel('govfund_filtered.xlsx', sheet_name='合并数据')
+    # invest_df['index'] = range(1, len(invest_df) + 1)
+    govfund_df.to_csv('govfund_w_index.csv', index=True)
+
+def get_investments_by_province_year():
+    """获取按省份和年份统计的投资笔数"""
+
+def filter_regression_data():
+    invest_df = pd.read_csv('invest_by_govfund.csv',index_col=0)
+    panel_df = pd.read_excel('patent_analysis/regression_panel_data.xlsx', sheet_name='面板数据')
+    # company_to_invest = {}
+    invest_df.set_index('融资主体', inplace=True)
+    panel_data = pd.DataFrame()
+    for i in range(int(len(panel_df)/6)):
+        company = panel_df.iloc[i*6]['company']
+        try:
+            block = panel_df.iloc[i*6:(i+1)*6]
+            block['国资背景'] = invest_df.loc[company]['国资背景']
+            # panel_data.append(block)
+            panel_data = pd.concat([panel_data,block],ignore_index=True)
+            print(123)
+        except:
+            pass
+    
+    panel_data.to_csv('panel_data_govfund.csv')
+
+def main():
+    args = argparse.ArgumentParser()
+    args.add_argument('--myfunc', help='函数名')
+    args = args.parse_args()
+    if args.myfunc == 'add_index_to_df':
+        add_index_to_df()
+    elif args.myfunc == 'get_govfund_investments':
+        get_govfund_investments()
+    elif args.myfunc == 'filter_regression_data':
+        filter_regression_data()
+
 if __name__ == "__main__":
-    try:
-        print("请选择要执行的功能:")
-        print("1. 过滤政府投资基金投资数据")
-        print("2. 按省份和年份统计投资笔数")
-        print("3. 执行所有功能")
-        
-        choice = input("\n请输入选择 (1/2/3): ").strip()
-        
-        if choice == "1":
-            success = filter_govfund_investments()
-            if success:
-                print("\n=== 过滤功能完成 ===")
-            else:
-                print("\n=== 过滤功能失败 ===")
-                
-        elif choice == "2":
-            success = analyze_investments_by_province_year()
-            if success:
-                print("\n=== 统计功能完成 ===")
-            else:
-                print("\n=== 统计功能失败 ===")
-                
-        elif choice == "3":
-            print("\n=== 执行所有功能 ===")
+    # main()
+    # success = filter_govfund_investments()
+    # get_govfund_investments()
+    filter_regression_data()
             
-            # 先执行过滤功能
-            print("\n--- 执行过滤功能 ---")
-            success1 = filter_govfund_investments()
-            
-            # 再执行统计功能
-            print("\n--- 执行统计功能 ---")
-            success2 = analyze_investments_by_province_year()
-            
-            if success1 and success2:
-                print("\n=== 所有功能执行完成 ===")
-            else:
-                print("\n=== 部分功能执行失败 ===")
-                
-        else:
-            print("无效选择，程序退出")
-            
-    except KeyboardInterrupt:
-        print("\n用户中断程序")
-    except Exception as e:
-        print(f"\n主程序执行过程中发生错误: {e}")
-        import traceback
-        traceback.print_exc()

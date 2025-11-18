@@ -147,7 +147,7 @@ def fund_time_and_spatial():
     """
 
     # 读取数据
-    df = pd.read_excel('govfund_filtered.xlsx')
+    df = pd.read_excel('govfund_filtered.xlsx', sheet_name='fund处理')
     
     # 将成立时间转换为日期时间格式
     # df['成立时间'] = pd.to_datetime(df['成立时间'], errors='coerce')
@@ -205,7 +205,7 @@ def fund_time_and_spatial():
     plt.tight_layout()
     
     # 保存图片
-    plt.savefig('patent_analysis/fund_distribution.png', dpi=300, bbox_inches='tight')
+    plt.savefig('patent_analysis/graph/fund_distribution.png', dpi=300, bbox_inches='tight')
     plt.show()
     
     # 创建更详细的年份分布图（柱状图）
@@ -225,7 +225,7 @@ def fund_time_and_spatial():
     
     plt.xticks(rotation=45)
     plt.tight_layout()
-    plt.savefig('patent_analysis/fund_year_distribution.png', dpi=300, bbox_inches='tight')
+    plt.savefig('patent_analysis/graph/fund_year_distribution.png', dpi=300, bbox_inches='tight')
     plt.show()
     
     # 创建省份分布柱状图
@@ -246,7 +246,7 @@ def fund_time_and_spatial():
                 f'{int(height)}', ha='center', va='bottom', fontsize=9)
     
     plt.tight_layout()
-    plt.savefig('patent_analysis/fund_province_distribution.png', dpi=300, bbox_inches='tight')
+    plt.savefig('patent_analysis/graph/fund_province_distribution.png', dpi=300, bbox_inches='tight')
     plt.show()
     
     # 打印统计信息
@@ -555,14 +555,14 @@ def fund_location():
 
 def main():
     # 分析基金时间和空间分布
-    # fund_time_and_spatial()
+    fund_time_and_spatial()
     
     # 分析专利数据
     # patent_analysis()
     # fund_clean()
-    df = read_invest_panel()
-    df = add_group_tag(df)
-    write_invest_panel(df, 'location')
+    # df = read_invest_panel()
+    # df = add_group_tag(df)
+    # write_invest_panel(df, 'location')
     # fund_location()
 
 if __name__ == "__main__":

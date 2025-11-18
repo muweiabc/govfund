@@ -287,6 +287,9 @@ def save_results_to_excel(results, output_file='govfund_analysis_results.xlsx'):
     except Exception as e:
         print(f"保存文件时出错: {e}")
 
+
+    
+    
 def main():
     """
     主函数
@@ -310,7 +313,7 @@ def main():
             visualize_results(results)
             
             # 保存结果
-            save_results_to_excel(results)
+            # save_results_to_excel(results)
             
             print("\n分析完成！")
         else:
@@ -319,4 +322,5 @@ def main():
         print("无法读取数据文件")
 
 if __name__ == "__main__":
-    main()
+    draw_govfund_investment_piechart()
+    # main()
